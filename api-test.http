@@ -1,0 +1,12 @@
+### Get all memories
+GET http://localhost:8081/api/memories
+
+### Create a memory
+POST http://localhost:8081/api/memories
+Content-Type: application/json
+
+{
+  "agentId": 1,
+  "content": "User prefers Java explanations",
+  "memoryType": "PREFERENCE"
+}

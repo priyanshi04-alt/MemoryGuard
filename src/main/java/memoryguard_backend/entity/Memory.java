@@ -20,6 +20,9 @@ public class Memory {
     @Column(nullable = false)
     private String memoryType;
 
+    @Column(nullable = false, length = 64)
+    private String integrityHash;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
@@ -60,6 +63,14 @@ public class Memory {
 
     public void setMemoryType(String memoryType) {
         this.memoryType = memoryType;
+    }
+
+    public String getIntegrityHash() {
+        return integrityHash;
+    }
+
+    public void setIntegrityHash(String integrityHash) {
+        this.integrityHash = integrityHash;
     }
 
     public LocalDateTime getCreatedAt() {

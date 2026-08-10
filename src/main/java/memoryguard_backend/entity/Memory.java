@@ -27,6 +27,20 @@ public class Memory {
 
     private LocalDateTime updatedAt;
 
+    // Risk analysis fields
+    // These are not stored in the database.
+    @Transient
+    private String riskLevel;
+
+    @Transient
+    private int riskScore;
+
+    @Transient
+    private String riskCategory;
+
+    @Transient
+    private String riskReason;
+
     // Constructor
     public Memory() {
     }
@@ -87,6 +101,38 @@ public class Memory {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getRiskLevel() {
+        return riskLevel;
+    }
+
+    public void setRiskLevel(String riskLevel) {
+        this.riskLevel = riskLevel;
+    }
+
+    public int getRiskScore() {
+        return riskScore;
+    }
+
+    public void setRiskScore(int riskScore) {
+        this.riskScore = riskScore;
+    }
+
+    public String getRiskCategory() {
+        return riskCategory;
+    }
+
+    public void setRiskCategory(String riskCategory) {
+        this.riskCategory = riskCategory;
+    }
+
+    public String getRiskReason() {
+        return riskReason;
+    }
+
+    public void setRiskReason(String riskReason) {
+        this.riskReason = riskReason;
     }
 
     // Automatically set timestamps when memory is created

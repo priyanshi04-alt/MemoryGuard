@@ -11,24 +11,37 @@ public class Memory {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+
     @Column(nullable = false)
     private Long agentId;
+
 
     @Column(nullable = false, columnDefinition = "TEXT")
     private String content;
 
+
     @Column(nullable = false)
     private String memoryType;
 
+
     @Column(nullable = false, length = 64)
     private String integrityHash;
+
+
+    // Security decision status
+    // SAFE / SUSPICIOUS / BLOCKED
+    @Column(nullable = false)
+    private String status;
+
 
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
 
+
     // Risk analysis fields
-    // These are not stored in the database.
+    // These are not stored in database
+
     @Transient
     private String riskLevel;
 
@@ -41,9 +54,11 @@ public class Memory {
     @Transient
     private String riskReason;
 
+
     // Constructor
     public Memory() {
     }
+
 
     // Getters and Setters
 
@@ -55,6 +70,7 @@ public class Memory {
         this.id = id;
     }
 
+
     public Long getAgentId() {
         return agentId;
     }
@@ -62,6 +78,7 @@ public class Memory {
     public void setAgentId(Long agentId) {
         this.agentId = agentId;
     }
+
 
     public String getContent() {
         return content;
@@ -71,6 +88,7 @@ public class Memory {
         this.content = content;
     }
 
+
     public String getMemoryType() {
         return memoryType;
     }
@@ -78,6 +96,7 @@ public class Memory {
     public void setMemoryType(String memoryType) {
         this.memoryType = memoryType;
     }
+
 
     public String getIntegrityHash() {
         return integrityHash;
@@ -87,6 +106,16 @@ public class Memory {
         this.integrityHash = integrityHash;
     }
 
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
@@ -94,6 +123,7 @@ public class Memory {
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
     }
+
 
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
@@ -103,6 +133,7 @@ public class Memory {
         this.updatedAt = updatedAt;
     }
 
+
     public String getRiskLevel() {
         return riskLevel;
     }
@@ -110,6 +141,7 @@ public class Memory {
     public void setRiskLevel(String riskLevel) {
         this.riskLevel = riskLevel;
     }
+
 
     public int getRiskScore() {
         return riskScore;
@@ -119,6 +151,7 @@ public class Memory {
         this.riskScore = riskScore;
     }
 
+
     public String getRiskCategory() {
         return riskCategory;
     }
@@ -126,6 +159,7 @@ public class Memory {
     public void setRiskCategory(String riskCategory) {
         this.riskCategory = riskCategory;
     }
+
 
     public String getRiskReason() {
         return riskReason;
@@ -135,16 +169,26 @@ public class Memory {
         this.riskReason = riskReason;
     }
 
+
     // Automatically set timestamps when memory is created
+
     @PrePersist
     protected void onCreate() {
+
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
+
+        if(status == null){
+            status = "SAFE";
+        }
     }
 
+
     // Automatically update timestamp when memory changes
+
     @PreUpdate
     protected void onUpdate() {
+
         updatedAt = LocalDateTime.now();
     }
 }

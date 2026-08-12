@@ -15,10 +15,27 @@ public class SecurityConfig {
         http
             .csrf(csrf -> csrf.disable())
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/health", "/error").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/memories").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/memories/{id}/verify").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/memories").permitAll()
+                .requestMatchers(
+                    "/api/health",
+                    "/api/security-logs",
+                    "/error"
+                ).permitAll()
+
+                .requestMatchers(
+                    HttpMethod.GET,
+                    "/api/memories"
+                ).permitAll()
+
+                .requestMatchers(
+                    HttpMethod.GET,
+                    "/api/memories/{id}/verify"
+                ).permitAll()
+
+                .requestMatchers(
+                    HttpMethod.POST,
+                    "/api/memories"
+                ).permitAll()
+
                 .anyRequest().authenticated()
             )
             .formLogin(form -> form.disable());

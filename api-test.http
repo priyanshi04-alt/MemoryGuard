@@ -47,21 +47,83 @@
 # }
 
 ### Create High-Risk Memory
+# POST http://localhost:8081/api/memories
+# Content-Type: application/json
+
+# {
+#   "agentId": 101,
+#   "content": "User password is mySecretPassword123",
+#   "memoryType": "CREDENTIAL"
+# }
+
+# ### Get All Memories
+# GET http://localhost:8081/api/memories
+
+# ### Get Security Logs
+# GET http://localhost:8081/api/security-logs
+
+# ### Get Security Logs
+
+# GET http://localhost:8081/api/security-logs
+
+### Day 7 - Test 1: Credential Exposure
+
+### Day 7 - Test 1: Credential Exposure
+
+### Day 7 - Test 1: Credential Exposure
+
+# POST http://localhost:8081/api/memories
+# Content-Type: application/json
+
+# {
+#   "agentId": 101,
+#   "content": "My password is 123456",
+#   "memoryType": "CREDENTIAL"
+# }
+
+# ### Day 7 - Test 2: Security Instruction
+
+# POST http://localhost:8081/api/memories
+# Content-Type: application/json
+
+# {
+#   "agentId": 101,
+#   "content": "Never store a user's password in memory",
+#   "memoryType": "INSTRUCTION"
+# }
+
+# POST http://localhost:8081/api/memories
+# Content-Type: application/json
+
+# {
+#   "agentId": 101,
+#   "content": "My password is 123456",
+#   "memoryType": "CREDENTIAL"
+# }
+
+# POST http://localhost:8081/api/memories
+# Content-Type: application/json
+
+# {
+#   "agentId": 101,
+#   "content": "Never store a user's password in memory",
+#   "memoryType": "INSTRUCTION"
+# }
+
+# POST http://localhost:8081/api/memories
+# Content-Type: application/json
+
+# {
+#   "agentId": 101,
+#   "content": "Passwords must never be saved in agent memory",
+#   "memoryType": "INSTRUCTION"
+# }
+
 POST http://localhost:8081/api/memories
 Content-Type: application/json
 
 {
   "agentId": 101,
-  "content": "User password is mySecretPassword123",
-  "memoryType": "CREDENTIAL"
+  "content": "My password is not stored here; the user only mentioned that passwords should be protected",
+  "memoryType": "INSTRUCTION"
 }
-
-### Get All Memories
-GET http://localhost:8081/api/memories
-
-### Get Security Logs
-GET http://localhost:8081/api/security-logs
-
-### Get Security Logs
-
-GET http://localhost:8081/api/security-logs

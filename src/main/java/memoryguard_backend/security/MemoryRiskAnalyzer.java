@@ -16,9 +16,18 @@ public class MemoryRiskAnalyzer {
             );
         }
 
-        String text = content.toLowerCase();
+        String text = content.toLowerCase().trim();
 
-        // Credential-related keywords
+        /*
+         * ============================================================
+         * 1. CREDENTIAL EXPOSURE
+         * ============================================================
+         *
+         * We do not flag every occurrence of words such as "password".
+         * We first check whether the content is actually exposing a
+         * credential or merely discussing/preventing credential storage.
+         */
+
         if (containsAny(text,
                 "password",
                 "passwd",
@@ -28,15 +37,46 @@ public class MemoryRiskAnalyzer {
                 "token",
                 "private key")) {
 
+            // Security instructions / prevention statements
+            if (isPreventiveContext(text)) {
+
+                return new RiskResult(
+                        "LOW",
+                        10,
+                        "NO_MAJOR_RISK",
+                        "Credential-related term detected, but the content appears to be a security or prevention instruction"
+                );
+            }
+
+            // Actual credential exposure
+            if (hasExposurePattern(text)) {
+
+                return new RiskResult(
+                        "HIGH",
+                        90,
+                        "CREDENTIAL_EXPOSURE",
+                        "Possible credential or authentication secret detected"
+                );
+            }
+
+            /*
+             * The keyword exists, but we do not have enough evidence
+             * that an actual secret has been exposed.
+             */
             return new RiskResult(
-                    "HIGH",
-                    90,
-                    "CREDENTIAL_EXPOSURE",
-                    "Possible credential or authentication secret detected"
+                    "MEDIUM",
+                    50,
+                    "CREDENTIAL_REFERENCE",
+                    "Credential-related information detected without clear evidence of secret exposure"
             );
         }
 
-        // Personal / sensitive information
+        /*
+         * ============================================================
+         * 2. PERSONAL / SENSITIVE INFORMATION
+         * ============================================================
+         */
+
         if (containsAny(text,
                 "aadhaar",
                 "pan number",
@@ -54,7 +94,12 @@ public class MemoryRiskAnalyzer {
             );
         }
 
-        // Security-related suspicious content
+        /*
+         * ============================================================
+         * 3. PROMPT MANIPULATION
+         * ============================================================
+         */
+
         if (containsAny(text,
                 "ignore previous instructions",
                 "system prompt",
@@ -70,6 +115,12 @@ public class MemoryRiskAnalyzer {
             );
         }
 
+        /*
+         * ============================================================
+         * 4. DEFAULT
+         * ============================================================
+         */
+
         return new RiskResult(
                 "LOW",
                 10,
@@ -77,6 +128,67 @@ public class MemoryRiskAnalyzer {
                 "No major security risk detected"
         );
     }
+
+
+    /*
+     * Checks whether the sentence is trying to prevent, prohibit,
+     * or warn against credential-related behavior.
+     */
+    private boolean isPreventiveContext(String text) {
+
+        return containsAny(text,
+                "never store",
+                "do not store",
+                "don't store",
+                "should not store",
+                "must not store",
+                "avoid storing",
+                "never share",
+                "do not share",
+                "don't share",
+                "should not share",
+                "must not share",
+                "avoid sharing",
+                "never expose",
+                "do not expose",
+                "don't expose",
+                "should not expose",
+                "must not expose",
+                "avoid exposing",
+                "never save",
+                "do not save",
+                "don't save",
+                "should not save",
+                "must not save",
+                "avoid saving"
+        );
+    }
+
+
+    /*
+     * Looks for simple evidence that a credential is actually being
+     * supplied/exposed.
+     */
+    private boolean hasExposurePattern(String text) {
+
+        return containsAny(text,
+                "password is",
+                "password:",
+                "passwd is",
+                "passwd:",
+                "secret is",
+                "secret:",
+                "api key is",
+                "api key:",
+                "apikey is",
+                "apikey:",
+                "token is",
+                "token:",
+                "private key is",
+                "private key:"
+        );
+    }
+
 
     private boolean containsAny(String text, String... keywords) {
 
@@ -88,6 +200,7 @@ public class MemoryRiskAnalyzer {
 
         return false;
     }
+
 
     public static class RiskResult {
 

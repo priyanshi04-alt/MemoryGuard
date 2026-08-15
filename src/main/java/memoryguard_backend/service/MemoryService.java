@@ -6,6 +6,8 @@ import memoryguard_backend.entity.SecurityLog;
 import memoryguard_backend.repository.MemoryRepository;
 import memoryguard_backend.security.HashUtil;
 import memoryguard_backend.security.MemoryRiskAnalyzer;
+import memoryguard_backend.security.PolicyDecision;
+import memoryguard_backend.security.PolicyEngine;
 
 import org.springframework.stereotype.Service;
 
@@ -18,15 +20,18 @@ public class MemoryService {
     private final MemoryRepository memoryRepository;
     private final MemoryRiskAnalyzer memoryRiskAnalyzer;
     private final SecurityLogService securityLogService;
+    private final PolicyEngine policyEngine;
 
     public MemoryService(
             MemoryRepository memoryRepository,
             MemoryRiskAnalyzer memoryRiskAnalyzer,
-            SecurityLogService securityLogService) {
+            SecurityLogService securityLogService,
+            PolicyEngine policyEngine) {
 
         this.memoryRepository = memoryRepository;
         this.memoryRiskAnalyzer = memoryRiskAnalyzer;
         this.securityLogService = securityLogService;
+        this.policyEngine = policyEngine;
     }
 
     // ============================================================
@@ -82,7 +87,10 @@ public class MemoryService {
 
     public Memory createMemory(Memory memory) {
 
-        // Generate integrity hash before storing
+        // ========================================================
+        // 1. GENERATE INTEGRITY HASH
+        // ========================================================
+
         String hash =
                 HashUtil.generateHash(
                         memory.getContent()
@@ -90,52 +98,82 @@ public class MemoryService {
 
         memory.setIntegrityHash(hash);
 
-        // Save first so that memory receives an ID
-        Memory savedMemory =
-                memoryRepository.save(memory);
-
-        // Analyze security risk
-        analyzeRisk(savedMemory);
 
         // ========================================================
-        // SECURITY DECISION
+        // 2. ANALYZE SECURITY RISK
         // ========================================================
 
-        if (savedMemory.getRiskScore() >= 80) {
+        analyzeRisk(memory);
 
-            // HIGH RISK
-            savedMemory.setStatus("BLOCKED");
+
+        // ========================================================
+        // 3. ASK POLICY ENGINE FOR DECISION
+        // ========================================================
+
+        PolicyDecision decision =
+                policyEngine.decide(
+                        memory.getRiskScore()
+                );
+
+
+        // ========================================================
+        // 4. BLOCK HIGH-RISK MEMORY
+        // ========================================================
+
+        if (decision == PolicyDecision.BLOCK) {
+
+            memory.setStatus("BLOCKED");
 
             SecurityLog log = new SecurityLog();
 
-            log.setMemoryId(
-                    savedMemory.getId()
-            );
+            // Blocked memory is NOT stored,
+            // therefore it has no database memory ID.
+            log.setMemoryId(null);
 
             log.setRiskScore(
-                    savedMemory.getRiskScore()
+                    memory.getRiskScore()
             );
 
             log.setThreatType(
-                    savedMemory.getRiskCategory()
+                    memory.getRiskCategory()
             );
 
             log.setActionTaken("BLOCKED");
 
             securityLogService.save(log);
 
-        } else if (savedMemory.getRiskScore() >= 50) {
+            // IMPORTANT:
+            // Blocked memory never reaches persistent storage.
 
-            // MEDIUM RISK
-            savedMemory.setStatus("REVIEW");
-
-        } else {
-
-            // LOW RISK
-            savedMemory.setStatus("SAFE");
+            return memory;
         }
 
-        return memoryRepository.save(savedMemory);
+
+        // ========================================================
+        // 5. REVIEW MEDIUM-RISK MEMORY
+        // ========================================================
+
+        if (decision == PolicyDecision.REVIEW) {
+
+            memory.setStatus("REVIEW");
+
+            Memory savedMemory =
+                    memoryRepository.save(memory);
+
+            return savedMemory;
+        }
+
+
+        // ========================================================
+        // 6. ALLOW LOW-RISK MEMORY
+        // ========================================================
+
+        memory.setStatus("SAFE");
+
+        Memory savedMemory =
+                memoryRepository.save(memory);
+
+        return savedMemory;
     }
 
     // ============================================================

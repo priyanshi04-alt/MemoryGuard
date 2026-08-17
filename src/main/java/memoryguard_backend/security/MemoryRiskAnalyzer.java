@@ -8,6 +8,10 @@ import java.util.List;
 @Component
 public class MemoryRiskAnalyzer {
 
+    // ============================================================
+    // MAIN ANALYSIS
+    // ============================================================
+
     public RiskResult analyze(String content) {
 
         if (content == null || content.trim().isEmpty()) {
@@ -19,6 +23,51 @@ public class MemoryRiskAnalyzer {
             );
         }
 
+        RuleAnalysisResult ruleResult =
+                analyzeRules(content);
+
+        int score = ruleResult.getRiskScore();
+
+        String category;
+        String reason;
+
+        if (ruleResult.getThreats().size() > 1) {
+
+            score = Math.min(score + 5, 100);
+
+            category = "MULTIPLE_THREATS";
+            reason = String.join(
+                    "; ",
+                    ruleResult.getReasons()
+            );
+
+        } else if (ruleResult.getThreats().size() == 1) {
+
+            category = ruleResult.getThreats().get(0);
+            reason = ruleResult.getReasons().get(0);
+
+        } else {
+
+            category = "NO_MAJOR_RISK";
+            reason = "No major security risk detected";
+            score = 10;
+        }
+
+        return new RiskResult(
+                getRiskLevel(score),
+                score,
+                category,
+                reason
+        );
+    }
+
+
+    // ============================================================
+    // RULE-BASED ANALYSIS
+    // ============================================================
+
+    private RuleAnalysisResult analyzeRules(String content) {
+
         String text = content.toLowerCase().trim();
 
         List<String> threats = new ArrayList<>();
@@ -26,97 +75,82 @@ public class MemoryRiskAnalyzer {
 
         int highestScore = 0;
 
-        // ============================================================
+
+        // ========================================================
         // 1. PROMPT INJECTION
-        // ============================================================
+        // ========================================================
 
         if (isPromptManipulation(text)) {
 
             threats.add("PROMPT_INJECTION");
-            reasons.add("Potential prompt injection or instruction override detected");
 
-            highestScore = Math.max(highestScore, 85);
+            reasons.add(
+                    "Potential prompt injection or instruction override detected"
+            );
+
+            highestScore =
+                    Math.max(highestScore, 85);
         }
 
-        // ============================================================
+
+        // ========================================================
         // 2. CREDENTIAL EXPOSURE
-        // ============================================================
+        // ========================================================
 
         if (containsCredentialKeyword(text)) {
 
             if (isPreventiveContext(text)) {
 
-                // Legitimate security guidance
-                // Example: "Never store passwords in memory."
+                // Legitimate security guidance.
+                // Example:
+                // "Never store passwords in memory."
 
             } else if (hasExposurePattern(text)) {
 
                 threats.add("CREDENTIAL_EXPOSURE");
-                reasons.add("Possible credential or authentication secret detected");
 
-                highestScore = Math.max(highestScore, 90);
+                reasons.add(
+                        "Possible credential or authentication secret detected"
+                );
+
+                highestScore =
+                        Math.max(highestScore, 90);
 
             } else {
 
                 threats.add("CREDENTIAL_REFERENCE");
-                reasons.add("Credential-related information detected without clear evidence of secret exposure");
 
-                highestScore = Math.max(highestScore, 50);
+                reasons.add(
+                        "Credential-related information detected without clear evidence of secret exposure"
+                );
+
+                highestScore =
+                        Math.max(highestScore, 50);
             }
         }
 
-        // ============================================================
+
+        // ========================================================
         // 3. SENSITIVE DATA
-        // ============================================================
+        // ========================================================
 
         if (containsSensitiveData(text)) {
 
             threats.add("SENSITIVE_DATA");
-            reasons.add("Possible sensitive personal or financial information detected");
 
-            highestScore = Math.max(highestScore, 80);
-        }
-
-        // ============================================================
-        // 4. MULTIPLE THREATS
-        // ============================================================
-
-        if (threats.size() > 1) {
-
-            // Multiple independent threats increase confidence/risk.
-            highestScore = Math.min(highestScore + 5, 100);
-
-            return new RiskResult(
-                    getRiskLevel(highestScore),
-                    highestScore,
-                    "MULTIPLE_THREATS",
-                    String.join("; ", reasons)
+            reasons.add(
+                    "Possible sensitive personal or financial information detected"
             );
+
+            highestScore =
+                    Math.max(highestScore, 80);
         }
 
-        // ============================================================
-        // 5. SINGLE THREAT
-        // ============================================================
 
-        if (threats.size() == 1) {
-
-            return new RiskResult(
-                    getRiskLevel(highestScore),
-                    highestScore,
-                    threats.get(0),
-                    reasons.get(0)
-            );
-        }
-
-        // ============================================================
-        // 6. SAFE MEMORY
-        // ============================================================
-
-        return new RiskResult(
-                "LOW",
-                10,
-                "NO_MAJOR_RISK",
-                "No major security risk detected"
+        return new RuleAnalysisResult(
+                highestScore,
+                threats,
+                reasons
         );
     }
 
@@ -127,7 +161,8 @@ public class MemoryRiskAnalyzer {
 
     private boolean isPromptManipulation(String text) {
 
-        return containsAny(text,
+        return containsAny(
+                text,
 
                 "ignore previous instructions",
                 "ignore all previous instructions",
@@ -249,6 +284,7 @@ public class MemoryRiskAnalyzer {
 
                 "password is",
                 "password:",
+
                 "passwd is",
                 "passwd:",
 
@@ -317,7 +353,9 @@ public class MemoryRiskAnalyzer {
     // UTILITY
     // ============================================================
 
-    private boolean containsAny(String text, String... keywords) {
+    private boolean containsAny(
+            String text,
+            String... keywords) {
 
         for (String keyword : keywords) {
 
@@ -331,7 +369,7 @@ public class MemoryRiskAnalyzer {
 
 
     // ============================================================
-    // RISK RESULT
+    // FINAL RISK RESULT
     // ============================================================
 
     public static class RiskResult {

@@ -2,6 +2,9 @@ package memoryguard_backend.security;
 
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Component
 public class MemoryRiskAnalyzer {
 
@@ -18,114 +21,96 @@ public class MemoryRiskAnalyzer {
 
         String text = content.toLowerCase().trim();
 
-        /*
-         * ============================================================
-         * 1. PROMPT INJECTION / INSTRUCTION MANIPULATION
-         * ============================================================
-         *
-         * These patterns indicate an attempt to override, replace,
-         * bypass, or manipulate instructions controlling the AI agent.
-         *
-         * These are treated as high-risk because such content should
-         * not be trusted as persistent agent memory.
-         */
+        List<String> threats = new ArrayList<>();
+        List<String> reasons = new ArrayList<>();
+
+        int highestScore = 0;
+
+        // ============================================================
+        // 1. PROMPT INJECTION
+        // ============================================================
 
         if (isPromptManipulation(text)) {
 
-            return new RiskResult(
-                    "HIGH",
-                    85,
-                    "PROMPT_INJECTION",
-                    "Potential prompt injection or instruction override detected"
-            );
+            threats.add("PROMPT_INJECTION");
+            reasons.add("Potential prompt injection or instruction override detected");
+
+            highestScore = Math.max(highestScore, 85);
         }
 
+        // ============================================================
+        // 2. CREDENTIAL EXPOSURE
+        // ============================================================
 
-        /*
-         * ============================================================
-         * 2. CREDENTIAL EXPOSURE
-         * ============================================================
-         *
-         * We do not flag every occurrence of words such as "password".
-         * We first check whether the content is actually exposing a
-         * credential or merely discussing/preventing credential storage.
-         */
+        if (containsCredentialKeyword(text)) {
 
-        if (containsAny(text,
-                "password",
-                "passwd",
-                "secret",
-                "api key",
-                "apikey",
-                "token",
-                "private key")) {
-
-            // Security instructions / prevention statements
             if (isPreventiveContext(text)) {
 
-                return new RiskResult(
-                        "LOW",
-                        10,
-                        "NO_MAJOR_RISK",
-                        "Credential-related term detected, but the content appears to be a security or prevention instruction"
-                );
+                // Legitimate security guidance
+                // Example: "Never store passwords in memory."
+
+            } else if (hasExposurePattern(text)) {
+
+                threats.add("CREDENTIAL_EXPOSURE");
+                reasons.add("Possible credential or authentication secret detected");
+
+                highestScore = Math.max(highestScore, 90);
+
+            } else {
+
+                threats.add("CREDENTIAL_REFERENCE");
+                reasons.add("Credential-related information detected without clear evidence of secret exposure");
+
+                highestScore = Math.max(highestScore, 50);
             }
+        }
 
-            // Actual credential exposure
-            if (hasExposurePattern(text)) {
+        // ============================================================
+        // 3. SENSITIVE DATA
+        // ============================================================
 
-                return new RiskResult(
-                        "HIGH",
-                        90,
-                        "CREDENTIAL_EXPOSURE",
-                        "Possible credential or authentication secret detected"
-                );
-            }
+        if (containsSensitiveData(text)) {
 
-            /*
-             * Keyword exists, but there is not enough evidence
-             * that an actual secret has been exposed.
-             */
+            threats.add("SENSITIVE_DATA");
+            reasons.add("Possible sensitive personal or financial information detected");
+
+            highestScore = Math.max(highestScore, 80);
+        }
+
+        // ============================================================
+        // 4. MULTIPLE THREATS
+        // ============================================================
+
+        if (threats.size() > 1) {
+
+            // Multiple independent threats increase confidence/risk.
+            highestScore = Math.min(highestScore + 5, 100);
 
             return new RiskResult(
-                    "MEDIUM",
-                    50,
-                    "CREDENTIAL_REFERENCE",
-                    "Credential-related information detected without clear evidence of secret exposure"
+                    getRiskLevel(highestScore),
+                    highestScore,
+                    "MULTIPLE_THREATS",
+                    String.join("; ", reasons)
             );
         }
 
+        // ============================================================
+        // 5. SINGLE THREAT
+        // ============================================================
 
-        /*
-         * ============================================================
-         * 3. PERSONAL / SENSITIVE INFORMATION
-         * ============================================================
-         */
-
-        if (containsAny(text,
-                "aadhaar",
-                "aadhaar number",
-                "pan number",
-                "credit card",
-                "debit card",
-                "bank account",
-                "phone number",
-                "email address")) {
+        if (threats.size() == 1) {
 
             return new RiskResult(
-                    "HIGH",
-                    80,
-                    "SENSITIVE_DATA",
-                    "Possible sensitive personal or financial information detected"
+                    getRiskLevel(highestScore),
+                    highestScore,
+                    threats.get(0),
+                    reasons.get(0)
             );
         }
 
-
-        /*
-         * ============================================================
-         * 4. DEFAULT
-         * ============================================================
-         */
+        // ============================================================
+        // 6. SAFE MEMORY
+        // ============================================================
 
         return new RiskResult(
                 "LOW",
@@ -136,129 +121,92 @@ public class MemoryRiskAnalyzer {
     }
 
 
-    /*
-     * ============================================================
-     * PROMPT MANIPULATION DETECTION
-     * ============================================================
-     */
+    // ============================================================
+    // PROMPT INJECTION DETECTION
+    // ============================================================
 
     private boolean isPromptManipulation(String text) {
 
-        /*
-         * Direct instruction override
-         */
+        return containsAny(text,
 
-        if (containsAny(text,
                 "ignore previous instructions",
                 "ignore all previous instructions",
                 "ignore the previous instructions",
+
                 "disregard previous instructions",
                 "disregard all previous instructions",
+
                 "forget previous instructions",
-                "forget all previous instructions")) {
+                "forget all previous instructions",
 
-            return true;
-        }
-
-
-        /*
-         * Attempt to replace or override system instructions
-         */
-
-        if (containsAny(text,
                 "override system instructions",
                 "override the system instructions",
                 "override previous instructions",
                 "override all previous instructions",
+
                 "replace system instructions",
                 "replace the system prompt",
-                "change the system prompt")) {
+                "change the system prompt",
 
-            return true;
-        }
-
-
-        /*
-         * System prompt manipulation
-         */
-
-        if (containsAny(text,
                 "reveal the system prompt",
                 "show the system prompt",
                 "print the system prompt",
                 "tell me the system prompt",
-                "ignore the system prompt")) {
+                "ignore the system prompt",
 
-            return true;
-        }
-
-
-        /*
-         * Security bypass attempts
-         */
-
-        if (containsAny(text,
                 "bypass security",
                 "bypass the security",
                 "disable security",
                 "disable the security",
                 "remove security restrictions",
                 "remove security rules",
-                "circumvent security")) {
+                "circumvent security",
 
-            return true;
-        }
-
-
-        /*
-         * Jailbreak-style instructions
-         */
-
-        if (containsAny(text,
                 "jailbreak",
                 "developer mode",
-                "dan mode")) {
+                "dan mode",
 
-            return true;
-        }
-
-
-        /*
-         * Explicit attempt to make the agent follow a new instruction
-         */
-
-        if (containsAny(text,
                 "always follow this instruction",
                 "follow this instruction instead",
                 "follow these instructions instead",
+
                 "you must obey this instruction",
                 "you must follow this instruction",
+
                 "from now on ignore",
-                "from now on follow")) {
-
-            return true;
-        }
-
-
-        return false;
+                "from now on follow"
+        );
     }
 
 
-    /*
-     * ============================================================
-     * PREVENTIVE SECURITY CONTEXT
-     * ============================================================
-     *
-     * Prevents legitimate security instructions such as:
-     *
-     * "Never store passwords in memory."
-     *
-     * from being classified as credential exposure.
-     */
+    // ============================================================
+    // CREDENTIAL KEYWORDS
+    // ============================================================
+
+    private boolean containsCredentialKeyword(String text) {
+
+        return containsAny(
+                text,
+                "password",
+                "passwd",
+                "secret",
+                "api key",
+                "apikey",
+                "token",
+                "private key"
+        );
+    }
+
+
+    // ============================================================
+    // PREVENTIVE SECURITY CONTEXT
+    // ============================================================
 
     private boolean isPreventiveContext(String text) {
 
-        return containsAny(text,
+        return containsAny(
+                text,
+
                 "never store",
                 "do not store",
                 "don't store",
@@ -290,38 +238,84 @@ public class MemoryRiskAnalyzer {
     }
 
 
-    /*
-     * ============================================================
-     * CREDENTIAL EXPOSURE DETECTION
-     * ============================================================
-     */
+    // ============================================================
+    // CREDENTIAL EXPOSURE
+    // ============================================================
 
     private boolean hasExposurePattern(String text) {
 
-        return containsAny(text,
+        return containsAny(
+                text,
+
                 "password is",
                 "password:",
                 "passwd is",
                 "passwd:",
+
                 "secret is",
                 "secret:",
+
                 "api key is",
                 "api key:",
+
                 "apikey is",
                 "apikey:",
+
                 "token is",
                 "token:",
+
                 "private key is",
                 "private key:"
         );
     }
 
 
-    /*
-     * ============================================================
-     * UTILITY
-     * ============================================================
-     */
+    // ============================================================
+    // SENSITIVE DATA
+    // ============================================================
+
+    private boolean containsSensitiveData(String text) {
+
+        return containsAny(
+                text,
+
+                "aadhaar",
+                "aadhaar number",
+                "pan number",
+
+                "credit card",
+                "debit card",
+
+                "bank account",
+                "account number",
+
+                "phone number",
+                "email address"
+        );
+    }
+
+
+    // ============================================================
+    // RISK LEVEL
+    // ============================================================
+
+    private String getRiskLevel(int score) {
+
+        if (score >= 80) {
+            return "HIGH";
+        }
+
+        if (score >= 50) {
+            return "MEDIUM";
+        }
+
+        return "LOW";
+    }
+
+
+    // ============================================================
+    // UTILITY
+    // ============================================================
 
     private boolean containsAny(String text, String... keywords) {
 
@@ -336,11 +330,9 @@ public class MemoryRiskAnalyzer {
     }
 
 
-    /*
-     * ============================================================
-     * RISK RESULT
-     * ============================================================
-     */
+    // ============================================================
+    // RISK RESULT
+    // ============================================================
 
     public static class RiskResult {
 

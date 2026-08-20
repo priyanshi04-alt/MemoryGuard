@@ -6,12 +6,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Component
-public class MemoryRiskAnalyzer {
+public class MemoryRiskAnalyzer implements SecurityAnalyzer {
 
     // ============================================================
     // MAIN ANALYSIS
     // ============================================================
 
+    @Override
     public RiskResult analyze(String content) {
 
         if (content == null || content.trim().isEmpty()) {
@@ -36,6 +37,7 @@ public class MemoryRiskAnalyzer {
             score = Math.min(score + 5, 100);
 
             category = "MULTIPLE_THREATS";
+
             reason = String.join(
                     "; ",
                     ruleResult.getReasons()
@@ -43,13 +45,19 @@ public class MemoryRiskAnalyzer {
 
         } else if (ruleResult.getThreats().size() == 1) {
 
-            category = ruleResult.getThreats().get(0);
-            reason = ruleResult.getReasons().get(0);
+            category =
+                    ruleResult.getThreats().get(0);
+
+            reason =
+                    ruleResult.getReasons().get(0);
 
         } else {
 
             category = "NO_MAJOR_RISK";
-            reason = "No major security risk detected";
+
+            reason =
+                    "No major security risk detected";
+
             score = 10;
         }
 
@@ -68,10 +76,14 @@ public class MemoryRiskAnalyzer {
 
     private RuleAnalysisResult analyzeRules(String content) {
 
-        String text = content.toLowerCase().trim();
+        String text =
+                content.toLowerCase().trim();
 
-        List<String> threats = new ArrayList<>();
-        List<String> reasons = new ArrayList<>();
+        List<String> threats =
+                new ArrayList<>();
+
+        List<String> reasons =
+                new ArrayList<>();
 
         int highestScore = 0;
 
@@ -94,16 +106,17 @@ public class MemoryRiskAnalyzer {
 
 
         // ========================================================
-        // 2. CREDENTIAL EXPOSURE
+        // 2. CREDENTIAL ANALYSIS
         // ========================================================
 
         if (containsCredentialKeyword(text)) {
 
             if (isPreventiveContext(text)) {
 
-                // Legitimate security guidance.
-                // Example:
+                // Security guidance such as:
                 // "Never store passwords in memory."
+                //
+                // This should not be treated as credential exposure.
 
             } else if (hasExposurePattern(text)) {
 
@@ -115,6 +128,14 @@ public class MemoryRiskAnalyzer {
 
                 highestScore =
                         Math.max(highestScore, 90);
+
+            } else if (isSecurityRecommendation(text)) {
+
+                // Example:
+                // "The user needs to update their password regularly."
+                //
+                // This discusses credential security but does not expose
+                // an actual secret.
 
             } else {
 
@@ -222,6 +243,7 @@ public class MemoryRiskAnalyzer {
 
         return containsAny(
                 text,
+
                 "password",
                 "passwd",
                 "secret",
@@ -269,6 +291,52 @@ public class MemoryRiskAnalyzer {
                 "should not save",
                 "must not save",
                 "avoid saving"
+        );
+    }
+
+
+    // ============================================================
+    // SECURITY RECOMMENDATION CONTEXT
+    // ============================================================
+
+    private boolean isSecurityRecommendation(String text) {
+
+        return containsAny(
+                text,
+
+                "update your password",
+                "update their password",
+                "change your password",
+                "change their password",
+
+                "reset your password",
+                "reset their password",
+
+                "use a strong password",
+                "use strong passwords",
+
+                "create a strong password",
+                "create strong passwords",
+
+                "password regularly",
+                "password frequently",
+
+                "enable multi factor authentication",
+                "enable two factor authentication",
+                "enable mfa",
+                "enable 2fa",
+
+                "rotate your api key",
+                "rotate api keys",
+
+                "change your api key",
+                "change api keys",
+
+                "protect your private key",
+                "protect private keys",
+
+                "keep your credentials secure",
+                "keep credentials secure"
         );
     }
 
@@ -372,13 +440,8 @@ public class MemoryRiskAnalyzer {
     // FINAL RISK RESULT
     // ============================================================
 
-    public static class RiskResult {
-
-        private final String riskLevel;
-        private final int riskScore;
-        private final String category;
-        private final String reason;
-
+    public static class RiskResult
+            extends SecurityAnalysisResult {
 
         public RiskResult(
                 String riskLevel,
@@ -386,30 +449,14 @@ public class MemoryRiskAnalyzer {
                 String category,
                 String reason) {
 
-            this.riskLevel = riskLevel;
-            this.riskScore = riskScore;
-            this.category = category;
-            this.reason = reason;
-        }
-
-
-        public String getRiskLevel() {
-            return riskLevel;
-        }
-
-
-        public int getRiskScore() {
-            return riskScore;
-        }
-
-
-        public String getCategory() {
-            return category;
-        }
-
-
-        public String getReason() {
-            return reason;
+            super(
+                    riskLevel,
+                    riskScore,
+                    category,
+                    reason,
+                    0.95,
+                    "RULE_BASED"
+            );
         }
     }
 }

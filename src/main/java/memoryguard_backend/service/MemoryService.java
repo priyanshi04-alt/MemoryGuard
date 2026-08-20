@@ -2,12 +2,12 @@ package memoryguard_backend.service;
 
 import memoryguard_backend.entity.Memory;
 import memoryguard_backend.entity.SecurityLog;
-
 import memoryguard_backend.repository.MemoryRepository;
 import memoryguard_backend.security.HashUtil;
-import memoryguard_backend.security.MemoryRiskAnalyzer;
 import memoryguard_backend.security.PolicyDecision;
 import memoryguard_backend.security.PolicyEngine;
+import memoryguard_backend.security.SecurityAnalyzer;
+import memoryguard_backend.security.SecurityAnalysisResult;
 
 import org.springframework.stereotype.Service;
 
@@ -18,21 +18,22 @@ import java.util.Optional;
 public class MemoryService {
 
     private final MemoryRepository memoryRepository;
-    private final MemoryRiskAnalyzer memoryRiskAnalyzer;
+    private final SecurityAnalyzer securityAnalyzer;
     private final SecurityLogService securityLogService;
     private final PolicyEngine policyEngine;
 
     public MemoryService(
             MemoryRepository memoryRepository,
-            MemoryRiskAnalyzer memoryRiskAnalyzer,
+            SecurityAnalyzer securityAnalyzer,
             SecurityLogService securityLogService,
             PolicyEngine policyEngine) {
 
         this.memoryRepository = memoryRepository;
-        this.memoryRiskAnalyzer = memoryRiskAnalyzer;
+        this.securityAnalyzer = securityAnalyzer;
         this.securityLogService = securityLogService;
         this.policyEngine = policyEngine;
     }
+
 
     // ============================================================
     // GET ALL MEMORIES
@@ -40,7 +41,8 @@ public class MemoryService {
 
     public List<Memory> getAllMemories() {
 
-        List<Memory> memories = memoryRepository.findAll();
+        List<Memory> memories =
+                memoryRepository.findAll();
 
         for (Memory memory : memories) {
             analyzeRisk(memory);
@@ -48,6 +50,7 @@ public class MemoryService {
 
         return memories;
     }
+
 
     // ============================================================
     // GET MEMORY BY ID
@@ -65,6 +68,7 @@ public class MemoryService {
         return memory;
     }
 
+
     // ============================================================
     // VERIFY MEMORY INTEGRITY
     // ============================================================
@@ -80,6 +84,7 @@ public class MemoryService {
                 memory.getIntegrityHash()
         );
     }
+
 
     // ============================================================
     // CREATE MEMORY
@@ -100,14 +105,14 @@ public class MemoryService {
 
 
         // ========================================================
-        // 2. ANALYZE SECURITY RISK
+        // 2. SECURITY ANALYSIS
         // ========================================================
 
         analyzeRisk(memory);
 
 
         // ========================================================
-        // 3. ASK POLICY ENGINE FOR DECISION
+        // 3. POLICY DECISION
         // ========================================================
 
         PolicyDecision decision =
@@ -124,10 +129,12 @@ public class MemoryService {
 
             memory.setStatus("BLOCKED");
 
-            SecurityLog log = new SecurityLog();
+            SecurityLog log =
+                    new SecurityLog();
 
-            // Blocked memory is NOT stored,
+            // Blocked memory is not persisted,
             // therefore it has no database memory ID.
+
             log.setMemoryId(null);
 
             log.setRiskScore(
@@ -142,9 +149,6 @@ public class MemoryService {
 
             securityLogService.save(log);
 
-            // IMPORTANT:
-            // Blocked memory never reaches persistent storage.
-
             return memory;
         }
 
@@ -157,10 +161,7 @@ public class MemoryService {
 
             memory.setStatus("REVIEW");
 
-            Memory savedMemory =
-                    memoryRepository.save(memory);
-
-            return savedMemory;
+            return memoryRepository.save(memory);
         }
 
 
@@ -170,58 +171,55 @@ public class MemoryService {
 
         memory.setStatus("SAFE");
 
-        Memory savedMemory =
-                memoryRepository.save(memory);
-
-        return savedMemory;
+        return memoryRepository.save(memory);
     }
 
+
     // ============================================================
-    // RISK ANALYSIS
+    // SECURITY ANALYSIS
     // ============================================================
 
     private void analyzeRisk(Memory memory) {
 
-        MemoryRiskAnalyzer.RiskResult result =
-                memoryRiskAnalyzer.analyze(
+        SecurityAnalysisResult result =
+                securityAnalyzer.analyze(
                         memory.getContent()
                 );
 
-        // Risk level
+
+        // ========================================================
+        // RISK LEVEL
+        // ========================================================
+
         memory.setRiskLevel(
                 result.getRiskLevel()
         );
 
-        // Risk score
+
+        // ========================================================
+        // RISK SCORE
+        // ========================================================
+
         memory.setRiskScore(
                 result.getRiskScore()
         );
 
-        // Threat category
+
+        // ========================================================
+        // THREAT CATEGORY
+        // ========================================================
+
         memory.setRiskCategory(
                 result.getCategory()
         );
 
-        // Explanation
+
+        // ========================================================
+        // EXPLANATION
+        // ========================================================
+
         memory.setRiskReason(
                 result.getReason()
         );
-
-        // ========================================================
-        // KEEP STATUS SYNCHRONIZED WITH RISK
-        // ========================================================
-
-        if (result.getRiskScore() >= 80) {
-
-            memory.setStatus("BLOCKED");
-
-        } else if (result.getRiskScore() >= 50) {
-
-            memory.setStatus("REVIEW");
-
-        } else {
-
-            memory.setStatus("SAFE");
-        }
     }
 }

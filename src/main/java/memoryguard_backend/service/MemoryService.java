@@ -6,8 +6,9 @@ import memoryguard_backend.repository.MemoryRepository;
 import memoryguard_backend.security.HashUtil;
 import memoryguard_backend.security.PolicyDecision;
 import memoryguard_backend.security.PolicyEngine;
-import memoryguard_backend.security.SecurityAnalyzer;
+import memoryguard_backend.security.RiskAggregator;
 import memoryguard_backend.security.SecurityAnalysisResult;
+import memoryguard_backend.security.SecurityAnalyzer;
 
 import org.springframework.stereotype.Service;
 
@@ -21,17 +22,20 @@ public class MemoryService {
     private final SecurityAnalyzer securityAnalyzer;
     private final SecurityLogService securityLogService;
     private final PolicyEngine policyEngine;
+    private final RiskAggregator riskAggregator;
 
     public MemoryService(
             MemoryRepository memoryRepository,
             SecurityAnalyzer securityAnalyzer,
             SecurityLogService securityLogService,
-            PolicyEngine policyEngine) {
+            PolicyEngine policyEngine,
+            RiskAggregator riskAggregator) {
 
         this.memoryRepository = memoryRepository;
         this.securityAnalyzer = securityAnalyzer;
         this.securityLogService = securityLogService;
         this.policyEngine = policyEngine;
+        this.riskAggregator = riskAggregator;
     }
 
 
@@ -181,9 +185,14 @@ public class MemoryService {
 
     private void analyzeRisk(Memory memory) {
 
-        SecurityAnalysisResult result =
+        SecurityAnalysisResult ruleResult =
                 securityAnalyzer.analyze(
                         memory.getContent()
+                );
+
+        SecurityAnalysisResult result =
+                riskAggregator.aggregate(
+                        List.of(ruleResult)
                 );
 
 

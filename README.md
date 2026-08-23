@@ -190,7 +190,7 @@ This repository documents the development of the project while the underlying se
 
 ## 👩‍💻 Author
 
-**Priyanshi Soni**
+**Priyanshi **
 
 B.E. Computer Science & Engineering
 Chitkara University, Himachal Pradesh

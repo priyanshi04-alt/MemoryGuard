@@ -14,6 +14,11 @@ public class AISemanticSecurityAnalyzer implements SecurityAnalyzer {
     }
 
     @Override
+    public String getAnalyzerType() {
+        return "SEMANTIC";
+    }
+
+    @Override
     public SecurityAnalysisResult analyze(String content) {
         // 1. Check if AI is disabled
         if (!aiConfigProperties.isEnabled()) {

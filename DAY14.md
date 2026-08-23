@@ -199,6 +199,34 @@ We have successfully completed Stage 4A of the AI Semantic Security Layer:
   - Safety-first score selection combinations (Rule LOW + AI HIGH, Rule HIGH + AI LOW, Rule MEDIUM + AI HIGH, etc.).
   - Non-downgrading security block assertions.
 
+---
+
+## 8. AI Semantic Layer — Stage 4B Bounded Parallel Analyzer Execution
+
+We have successfully completed Stage 4B of the AI Semantic Security Layer:
+
+### 8.1 Spring Managed Bounded Executor
+- Introduced properties `memoryguard.security.analysis.parallelism` (default: 2) and `memoryguard.security.analysis.timeout-ms` (default: 1500) under [application.properties](file:///e:/software/MemeoryGuard/memoryguard-backend/src/main/resources/application.properties).
+- Created a configuration bean `SecurityAnalysisExecutorConfig` managing a Spring-lifecycle bounded thread pool (`ThreadPoolExecutor` with worker count equal to configured parallelism and a task queue size limit of 1000) that shuts down gracefully via `destroyMethod = "shutdown"`.
+
+### 8.2 Parallel Analyzer Submission & Isolation
+- Updated `MemoryService.analyzeRisk()` to concurrently submit deterministic and semantic analysis tasks to the bounded executor.
+- Enforces per-analyzer timeout isolation via `Future.get(timeout, TimeUnit.MILLISECONDS)`.
+- If the AI semantic analyzer hangs, times out, or throws exceptions, it is cleanly isolated and mapped to the generic `SEMANTIC_UNAVAILABLE` fail-safe response.
+- **Deterministic Baseline Protection**: Any timeout or crash of the deterministic analyzer propagates the exception, failing the memory save transaction rather than silently converting it into a false low-risk safe state.
+
+### 8.3 Polymorphic Type Checking
+- Added a `default String getAnalyzerType()` method to `SecurityAnalyzer` interface contract returning `"DETERMINISTIC"` by default.
+- Overridden in `AISemanticSecurityAnalyzer` to return `"SEMANTIC"`. This permits clean, interface-driven differentiation of baseline and fallback task exceptions inside `MemoryService` without resorting to `instanceof` or class reflection checks.
+
+### 8.4 Concurrency & Timeout Unit Tests
+- Created `ConcurrencyTimeoutTests` containing 4 deterministic concurrency validation tests:
+  - `testGenuinelyParallelExecution`: Uses coordinating `CountDownLatch` primitives to prove that both analyzers are entered and run concurrently.
+  - `testAIAnalyzerTimeoutDoesNotDiscardDeterministicResult`: Proves a slow/hung AI analyzer is canceled after the timeout threshold while the rule result is successfully retained.
+  - `testAIAnalyzerExceptionDoesNotDiscardDeterministicResult`: Proves an AI API key exception does not crash the baseline analysis transaction.
+  - `testDeterministicAnalyzerFailurePropagated`: Asserts that a deterministic rules failure correctly propagates the exception and halts processing.
+
+
 
 
 

@@ -9,11 +9,13 @@ import memoryguard_backend.security.PolicyEngine;
 import memoryguard_backend.security.RiskAggregator;
 import memoryguard_backend.security.SecurityAnalysisResult;
 import memoryguard_backend.security.SecurityAnalyzer;
+import memoryguard_backend.security.SecurityAnalysisProperties;
 
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ExecutorService;
 
 @Service
 public class MemoryService {
@@ -23,19 +25,25 @@ public class MemoryService {
     private final SecurityLogService securityLogService;
     private final PolicyEngine policyEngine;
     private final RiskAggregator riskAggregator;
+    private final ExecutorService securityAnalysisExecutor;
+    private final SecurityAnalysisProperties securityAnalysisProperties;
 
     public MemoryService(
             MemoryRepository memoryRepository,
             List<SecurityAnalyzer> securityAnalyzers,
             SecurityLogService securityLogService,
             PolicyEngine policyEngine,
-            RiskAggregator riskAggregator) {
+            RiskAggregator riskAggregator,
+            ExecutorService securityAnalysisExecutor,
+            SecurityAnalysisProperties securityAnalysisProperties) {
 
         this.memoryRepository = memoryRepository;
         this.securityAnalyzers = securityAnalyzers;
         this.securityLogService = securityLogService;
         this.policyEngine = policyEngine;
         this.riskAggregator = riskAggregator;
+        this.securityAnalysisExecutor = securityAnalysisExecutor;
+        this.securityAnalysisProperties = securityAnalysisProperties;
     }
 
 
@@ -195,10 +203,38 @@ public class MemoryService {
     // ============================================================
 
     private void analyzeRisk(Memory memory) {
-        List<SecurityAnalysisResult> results = new java.util.ArrayList<>();
+        List<java.util.concurrent.Future<SecurityAnalysisResult>> futures = new java.util.ArrayList<>();
         for (SecurityAnalyzer analyzer : securityAnalyzers) {
-            SecurityAnalysisResult res = analyzer.analyze(memory.getContent());
-            results.add(res);
+            futures.add(securityAnalysisExecutor.submit(() -> analyzer.analyze(memory.getContent())));
+        }
+
+        List<SecurityAnalysisResult> results = new java.util.ArrayList<>();
+        for (int i = 0; i < securityAnalyzers.size(); i++) {
+            SecurityAnalyzer analyzer = securityAnalyzers.get(i);
+            java.util.concurrent.Future<SecurityAnalysisResult> future = futures.get(i);
+            try {
+                SecurityAnalysisResult res = future.get(securityAnalysisProperties.getTimeoutMs(), java.util.concurrent.TimeUnit.MILLISECONDS);
+                results.add(res);
+            } catch (java.util.concurrent.TimeoutException e) {
+                future.cancel(true);
+                if (!"SEMANTIC".equals(analyzer.getAnalyzerType())) {
+                    throw new RuntimeException("Deterministic security analysis timed out", e);
+                } else {
+                    results.add(createUnavailableResult("AI Semantic analysis timed out"));
+                }
+            } catch (java.util.concurrent.ExecutionException e) {
+                if (!"SEMANTIC".equals(analyzer.getAnalyzerType())) {
+                    throw new RuntimeException("Deterministic security analysis failed", e.getCause());
+                } else {
+                    results.add(createUnavailableResult("AI Semantic analysis failed"));
+                }
+            } catch (Exception e) {
+                if (!"SEMANTIC".equals(analyzer.getAnalyzerType())) {
+                    throw new RuntimeException("Deterministic security analysis interrupted or failed", e);
+                } else {
+                    results.add(createUnavailableResult("AI Semantic analysis failed"));
+                }
+            }
         }
 
         SecurityAnalysisResult result =
@@ -240,6 +276,17 @@ public class MemoryService {
 
         memory.setRiskReason(
                 result.getReason()
+        );
+    }
+
+    private SecurityAnalysisResult createUnavailableResult(String reason) {
+        return new SecurityAnalysisResult(
+                "LOW",
+                0,
+                "SEMANTIC_UNAVAILABLE",
+                reason,
+                0.0,
+                "SEMANTIC"
         );
     }
 

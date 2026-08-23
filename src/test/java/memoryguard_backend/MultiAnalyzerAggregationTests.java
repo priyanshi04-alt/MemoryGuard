@@ -5,10 +5,13 @@ import memoryguard_backend.repository.MemoryRepository;
 import memoryguard_backend.security.*;
 import memoryguard_backend.service.MemoryService;
 import memoryguard_backend.service.SecurityLogService;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -19,6 +22,8 @@ class MultiAnalyzerAggregationTests {
     private MemoryRepository memoryRepository;
     private SecurityLogService securityLogService;
     private PolicyEngine policyEngine;
+    private ExecutorService testExecutor;
+    private SecurityAnalysisProperties testProperties;
 
     @BeforeEach
     void setUp() {
@@ -26,6 +31,18 @@ class MultiAnalyzerAggregationTests {
         memoryRepository = mock(MemoryRepository.class);
         securityLogService = mock(SecurityLogService.class);
         policyEngine = new PolicyEngine();
+
+        testProperties = new SecurityAnalysisProperties();
+        testProperties.setParallelism(2);
+        testProperties.setTimeoutMs(1000);
+        testExecutor = Executors.newFixedThreadPool(2);
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (testExecutor != null) {
+            testExecutor.shutdownNow();
+        }
     }
 
     @Test
@@ -112,7 +129,9 @@ class MultiAnalyzerAggregationTests {
                 List.of(mockRuleAnalyzer),
                 securityLogService,
                 policyEngine,
-                riskAggregator
+                riskAggregator,
+                testExecutor,
+                testProperties
         );
 
         Memory memory = new Memory();
@@ -140,7 +159,9 @@ class MultiAnalyzerAggregationTests {
                 List.of(mockRuleAnalyzer, mockSemanticAnalyzer),
                 securityLogService,
                 policyEngine,
-                riskAggregator
+                riskAggregator,
+                testExecutor,
+                testProperties
         );
 
         Memory memory = new Memory();
@@ -169,7 +190,9 @@ class MultiAnalyzerAggregationTests {
                 List.of(mockRuleAnalyzer, mockSemanticAnalyzer),
                 securityLogService,
                 policyEngine,
-                riskAggregator
+                riskAggregator,
+                testExecutor,
+                testProperties
         );
 
         Memory memory = new Memory();
@@ -196,7 +219,9 @@ class MultiAnalyzerAggregationTests {
                 List.of(mockRuleAnalyzer, mockSemanticAnalyzer),
                 securityLogService,
                 policyEngine,
-                riskAggregator
+                riskAggregator,
+                testExecutor,
+                testProperties
         );
 
         Memory memory = new Memory();

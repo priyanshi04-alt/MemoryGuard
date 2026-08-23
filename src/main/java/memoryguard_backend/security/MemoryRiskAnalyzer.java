@@ -1,11 +1,13 @@
 package memoryguard_backend.security;
 
 import org.springframework.stereotype.Component;
+import org.springframework.context.annotation.Primary;
 
 import java.util.ArrayList;
 import java.util.List;
 
 @Component
+@Primary
 public class MemoryRiskAnalyzer implements SecurityAnalyzer {
 
     // ============================================================

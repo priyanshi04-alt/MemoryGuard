@@ -215,6 +215,13 @@ function MemoryAnalysis() {
                   {result.integrityHash}
                 </strong>
               </div>
+
+              {result.correlationId && (
+                <div>
+                  <span>Correlation ID</span>
+                  <strong>{result.correlationId}</strong>
+                </div>
+              )}
             </div>
           </div>
         </section>

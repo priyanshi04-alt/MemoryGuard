@@ -33,7 +33,8 @@ public class SecurityConfig {
 
                 .requestMatchers(
                     HttpMethod.GET,
-                    "/api/memories"
+                    "/api/memories",
+                    "/api/memories/stats"
                 ).permitAll()
 
                 .requestMatchers(

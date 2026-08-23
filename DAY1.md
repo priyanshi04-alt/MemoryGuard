@@ -32,7 +32,7 @@ A Spring Boot backend project was created with:
 - Project: Maven
 - Language: Java
 - Packaging: JAR
-- Java: 25 LTS
+- Java: 25 LTS (runs on Oracle JDK 25 JVM via Maven wrapper, targeting Java 21 compatibility in pom.xml)
 - Spring Boot: 4.1.0
 - Project name: memoryguard-backend
 - Package: memoryguard_backend

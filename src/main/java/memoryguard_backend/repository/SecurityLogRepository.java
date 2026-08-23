@@ -5,5 +5,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface SecurityLogRepository 
         extends JpaRepository<SecurityLog, Long> {
-
+    long countByActionTaken(String actionTaken);
 }

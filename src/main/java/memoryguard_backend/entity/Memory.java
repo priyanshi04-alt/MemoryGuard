@@ -33,6 +33,9 @@ public class Memory {
     @Column(nullable = false)
     private String status;
 
+    @Column(length = 36)
+    private String correlationId;
+
 
     private LocalDateTime createdAt;
 
@@ -113,6 +116,15 @@ public class Memory {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+
+    public String getCorrelationId() {
+        return correlationId;
+    }
+
+    public void setCorrelationId(String correlationId) {
+        this.correlationId = correlationId;
     }
 
 

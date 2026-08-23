@@ -18,8 +18,8 @@ public class MemoryController {
     }
 
     @GetMapping
-    public List<Memory> getAllMemories() {
-        return memoryService.getAllMemories();
+    public List<Memory> getAllMemories(@RequestParam(value = "status", defaultValue = "SAFE") String status) {
+        return memoryService.getMemoriesByStatus(status);
     }
 
     @PostMapping
@@ -39,5 +39,23 @@ public class MemoryController {
             .orElseGet(() -> org.springframework.http.ResponseEntity.notFound().build());
     }
 
+    @GetMapping("/stats")
+    public MemoryStats getMemoryStats() {
+        return memoryService.getMemoryStats();
+    }
+
     public record VerificationResult(Long memoryId, String status, String message) {}
+    
+    public record MemoryStats(
+        long totalTrusted,
+        long blockedAttempts,
+        long needsReview,
+        RiskDistribution riskDistribution
+    ) {}
+
+    public record RiskDistribution(
+        long low,
+        long medium,
+        long high
+    ) {}
 }

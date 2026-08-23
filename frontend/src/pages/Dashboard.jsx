@@ -3,61 +3,60 @@ import { Link } from 'react-router-dom'
 
 function Dashboard() {
   const [memories, setMemories] = useState([])
+  const [stats, setStats] = useState({
+    totalTrusted: 0,
+    blockedAttempts: 0,
+    needsReview: 0,
+    riskDistribution: { low: 0, medium: 0, high: 0 }
+  })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    fetch('http://localhost:8081/api/memories')
-      .then((response) => {
+    Promise.all([
+      fetch('http://localhost:8081/api/memories?status=ALL').then((response) => {
         if (!response.ok) {
           throw new Error('Failed to fetch memories')
         }
-
+        return response.json()
+      }),
+      fetch('http://localhost:8081/api/memories/stats').then((response) => {
+        if (!response.ok) {
+          throw new Error('Failed to fetch statistics')
+        }
         return response.json()
       })
-      .then((data) => {
-        setMemories(data)
-      })
-      .catch((err) => {
-        console.error(err)
-        setError('Unable to load memory data from backend.')
-      })
-      .finally(() => {
-        setLoading(false)
-      })
+    ])
+    .then(([memoriesData, statsData]) => {
+      setMemories(memoriesData)
+      setStats(statsData)
+    })
+    .catch((err) => {
+      console.error(err)
+      setError('Unable to load dashboard data from backend.')
+    })
+    .finally(() => {
+      setLoading(false)
+    })
   }, [])
 
   /* =========================
      REAL STATISTICS
   ========================= */
 
-  const totalMemories = memories.length
+  const totalMemories = stats.totalTrusted + stats.blockedAttempts + stats.needsReview
 
-  const allowedMemories = memories.filter(
-    (memory) => memory.status === 'SAFE'
-  ).length
+  const allowedMemories = stats.totalTrusted
 
-  const blockedMemories = memories.filter(
-    (memory) => memory.status === 'BLOCKED'
-  ).length
+  const blockedMemories = stats.blockedAttempts
 
-  const reviewMemories = memories.filter(
-    (memory) =>
-      memory.riskLevel === 'MEDIUM' ||
-      memory.status === 'REVIEW'
-  ).length
+  const reviewMemories = stats.needsReview
 
-  const lowRiskMemories = memories.filter(
-    (memory) => memory.riskLevel === 'LOW'
-  ).length
+  const lowRiskMemories = stats.riskDistribution.low
 
-  const mediumRiskMemories = memories.filter(
-    (memory) => memory.riskLevel === 'MEDIUM'
-  ).length
+  const mediumRiskMemories = stats.riskDistribution.medium
 
-  const highRiskMemories = memories.filter(
-    (memory) => memory.riskLevel === 'HIGH'
-  ).length
+  const highRiskMemories = stats.riskDistribution.high
 
   const allowedPercentage =
     totalMemories > 0

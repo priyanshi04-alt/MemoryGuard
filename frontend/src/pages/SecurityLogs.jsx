@@ -85,6 +85,7 @@ function SecurityLogs() {
                   <th>Threat Type</th>
                   <th>Risk Score</th>
                   <th>Action</th>
+                  <th>Correlation ID</th>
                   <th>Created At</th>
                 </tr>
               </thead>
@@ -132,6 +133,10 @@ function SecurityLogs() {
                       >
                         {log.actionTaken}
                       </span>
+                    </td>
+
+                    <td className="log-correlation" style={{fontFamily: 'monospace', fontSize: '0.85em'}}>
+                      {log.correlationId || '—'}
                     </td>
 
                     <td className="log-date">

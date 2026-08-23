@@ -24,4 +24,7 @@ public class SecurityLogService {
 
     }
 
+    public long countByAction(String action) {
+        return repository.countByActionTaken(action);
+    }
 }

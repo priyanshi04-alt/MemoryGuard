@@ -19,6 +19,9 @@ public class SecurityLog {
 
     private String actionTaken;
 
+    @Column(length = 36)
+    private String correlationId;
+
     private LocalDateTime createdAt;
 
 
@@ -66,6 +69,14 @@ public class SecurityLog {
 
     public void setActionTaken(String actionTaken) {
         this.actionTaken = actionTaken;
+    }
+
+    public String getCorrelationId() {
+        return correlationId;
+    }
+
+    public void setCorrelationId(String correlationId) {
+        this.correlationId = correlationId;
     }
 
     public LocalDateTime getCreatedAt() {

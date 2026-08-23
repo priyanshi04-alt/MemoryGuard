@@ -44,9 +44,16 @@ public class MemoryService {
     // ============================================================
 
     public List<Memory> getAllMemories() {
+        return getMemoriesByStatus("SAFE");
+    }
 
-        List<Memory> memories =
-                memoryRepository.findAll();
+    public List<Memory> getMemoriesByStatus(String status) {
+        List<Memory> memories;
+        if ("ALL".equalsIgnoreCase(status)) {
+            memories = memoryRepository.findAll();
+        } else {
+            memories = memoryRepository.findByStatus(status.toUpperCase());
+        }
 
         for (Memory memory : memories) {
             analyzeRisk(memory);
@@ -96,6 +103,9 @@ public class MemoryService {
 
     public Memory createMemory(Memory memory) {
 
+        String correlationId = java.util.UUID.randomUUID().toString();
+        memory.setCorrelationId(correlationId);
+
         // ========================================================
         // 1. GENERATE INTEGRITY HASH
         // ========================================================
@@ -140,6 +150,7 @@ public class MemoryService {
             // therefore it has no database memory ID.
 
             log.setMemoryId(null);
+            log.setCorrelationId(correlationId);
 
             log.setRiskScore(
                     memory.getRiskScore()
@@ -229,6 +240,23 @@ public class MemoryService {
 
         memory.setRiskReason(
                 result.getReason()
+        );
+    }
+
+    public memoryguard_backend.controller.MemoryController.MemoryStats getMemoryStats() {
+        long totalTrusted = memoryRepository.countByStatus("SAFE");
+        long needsReview = memoryRepository.countByStatus("REVIEW");
+        long blockedAttempts = securityLogService.countByAction("BLOCKED");
+
+        return new memoryguard_backend.controller.MemoryController.MemoryStats(
+                totalTrusted,
+                blockedAttempts,
+                needsReview,
+                new memoryguard_backend.controller.MemoryController.RiskDistribution(
+                        totalTrusted,
+                        needsReview,
+                        blockedAttempts
+                )
         );
     }
 }

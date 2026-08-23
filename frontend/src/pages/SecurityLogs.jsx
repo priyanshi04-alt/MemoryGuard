@@ -82,8 +82,11 @@ function SecurityLogs() {
                 <tr>
                   <th>ID</th>
                   <th>Memory ID</th>
+                  <th>Source</th>
                   <th>Threat Type</th>
                   <th>Risk Score</th>
+                  <th>Risk Level</th>
+                  <th>Confidence</th>
                   <th>Action</th>
                   <th>Correlation ID</th>
                   <th>Created At</th>
@@ -100,7 +103,11 @@ function SecurityLogs() {
                     </td>
 
                     <td>
-                      Memory #{log.memoryId}
+                      {log.memoryId ? `Memory #${log.memoryId}` : '—'}
+                    </td>
+
+                    <td style={{fontWeight: '500'}}>
+                      {log.analyzerType || '—'}
                     </td>
 
                     <td>
@@ -124,11 +131,23 @@ function SecurityLogs() {
                     </td>
 
                     <td>
+                      <span className={`threat-badge ${log.riskLevel ? log.riskLevel.toLowerCase() : ''}`}>
+                        {log.riskLevel || '—'}
+                      </span>
+                    </td>
+
+                    <td>
+                      {log.confidence != null ? `${(log.confidence * 100).toFixed(0)}%` : '—'}
+                    </td>
+
+                    <td>
                       <span
                         className={`log-action ${
                           log.actionTaken === 'BLOCKED'
                             ? 'blocked'
-                            : 'allowed'
+                            : log.actionTaken === 'REVIEW'
+                              ? 'review'
+                              : 'allowed'
                         }`}
                       >
                         {log.actionTaken}

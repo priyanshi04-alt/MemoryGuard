@@ -24,6 +24,15 @@ public class SecurityLog {
 
     private LocalDateTime createdAt;
 
+    // Added semantic telemetry metadata
+    @Column(length = 50)
+    private String analyzerType;
+
+    @Column(length = 20)
+    private String riskLevel;
+
+    private Double confidence;
+
 
     public SecurityLog() {
     }
@@ -81,5 +90,29 @@ public class SecurityLog {
 
     public LocalDateTime getCreatedAt() {
         return createdAt;
+    }
+
+    public String getAnalyzerType() {
+        return analyzerType;
+    }
+
+    public void setAnalyzerType(String analyzerType) {
+        this.analyzerType = analyzerType;
+    }
+
+    public String getRiskLevel() {
+        return riskLevel;
+    }
+
+    public void setRiskLevel(String riskLevel) {
+        this.riskLevel = riskLevel;
+    }
+
+    public Double getConfidence() {
+        return confidence;
+    }
+
+    public void setConfidence(Double confidence) {
+        this.confidence = confidence;
     }
 }

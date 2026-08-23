@@ -226,6 +226,67 @@ We have successfully completed Stage 4B of the AI Semantic Security Layer:
   - `testAIAnalyzerExceptionDoesNotDiscardDeterministicResult`: Proves an AI API key exception does not crash the baseline analysis transaction.
   - `testDeterministicAnalyzerFailurePropagated`: Asserts that a deterministic rules failure correctly propagates the exception and halts processing.
 
+---
+
+## 9. AI Semantic Layer — Stage 5A Security Observability & Safe Telemetry
+
+We have successfully completed Stage 5A of the MemoryGuard project:
+
+### 9.1 Database Telemetry Model
+- Extended the `SecurityLog` entity with safe structured metadata fields:
+  - `analyzerType` (`String(50)`): Tracks the type of the analyzer that produced the decision (`RULE` or `SEMANTIC`).
+  - `riskLevel` (`String(20)`): Stores the evaluated risk category (`LOW`, `MEDIUM`, `HIGH`).
+  - `confidence` (`Double`): Captures the model's confidence boundary factor.
+- **Privacy Gating**: **MemoryGuard stores structured security metadata ONLY**. Raw memory payload contents, AI prompts, system prompts, Gemini API responses, and exception traces are excluded from telemetry persistence.
+
+### 9.2 Unified Telemetry Pipeline
+- Modified `MemoryService.createMemory()` to generate a `SecurityLog` for **every** pipeline outcome (ALLOW/SAFE, REVIEW, and BLOCK).
+- Blocked requests retain `correlationId` tracking while mapping `memoryId = null`, preventing any database persistence of the blocked text payload.
+- Unified result consistency by propagating the specific winning analyzer type (`RULE` or `SEMANTIC`) inside `RiskAggregator.aggregate()` rather than hardcoding a generic value.
+
+### 9.3 Frontend Dashboard Integration
+- Expanded `pages/SecurityLogs.jsx` table view with columns for **Source (Analyzer Type)**, **Risk Level**, and **Confidence**.
+- Wrapped memory ID rendering to display `—` for blocked attempts instead of showing raw null values.
+
+### 9.4 Telemetry Observability Tests
+- Created `SecurityTelemetryTests` with 7 validation test cases verifying:
+  - Telemetry generation for SAFE, REVIEW, and BLOCK decisions.
+  - Correct `correlationId` association and null-safety when saving memory ID on block.
+  - Explicitly tested that sensitive test strings (`"SECRET_MEMORY_PAYLOAD"`, `"API_KEY_SECRET_123"`, and `"RAW_GEMINI_RESPONSE"`) are not written to telemetry logs.
+
+---
+
+## 10. Software Supply-Chain Security (OWASP A03:2025)
+
+We have explicitly mapped and documented the **OWASP A03:2025 Software Supply-Chain Failures** risk domain for the MemoryGuard platform:
+
+### 10.1 Segregated Security Layers
+The MemoryGuard architecture is defined across two distinct, non-overlapping security domains:
+1. **Runtime Memory Security (Active)**: Coordinates parallel rules-based and semantic security analysis, risk score aggregation, policy actions, and structured telemetry logging to protect the AI agent's memory.
+2. **Software Supply-Chain Security (Planned)**: Establishes build-time and compile-time controls for third-party libraries, compile toolchains, and package binaries that build and run the MemoryGuard application.
+
+### 10.2 Threat Modeling (OWASP A03:2025 Relevance)
+Recognized threat vectors affecting MemoryGuard dependencies include:
+- Maliciously compromised Maven dependency packages.
+- Outdated third-party components containing active CVE vulnerabilities.
+- Vulnerabilities within Maven/JVM compiler toolchains.
+- Outdated database drivers or HTTP connectors (e.g. within Spring Boot core stack).
+
+**Attack Vector Diagram**:
+```
+Vulnerable / Malicious Dependency ──► MemoryGuard Backend ──► Security Boundary Compromised
+```
+
+### 10.3 Future Implementation Roadmap (Planned Milestone)
+The following tasks are scheduled for a future dedicated **Supply-Chain Security** milestone (No runtime code changes have been introduced in this phase):
+1. **SBOM Generation**: Set up Maven plugins (e.g., CycloneDX) to auto-generate a Software Bill of Materials.
+2. **Dependency Vulnerability Scanning**: Integrate automated dependency-check tools in compilation/CI loops.
+3. **CVE/OSV Intelligence Feed**: Cross-reference dependency versions against CVE/GitHub Advisory databases.
+4. **Build Gating**: Configure CI policies to break builds or alert developers if dependencies exceed vulnerability score thresholds (e.g. CVSS >= 7.0).
+5. **Automated Upgrades**: Implement dependency update automation to proactively keep library frameworks patched.
+
+
+
 
 
 

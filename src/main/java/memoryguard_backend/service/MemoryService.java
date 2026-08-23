@@ -130,7 +130,7 @@ public class MemoryService {
         // 2. SECURITY ANALYSIS
         // ========================================================
 
-        analyzeRisk(memory);
+        SecurityAnalysisResult analysisResult = analyzeRisk(memory);
 
 
         // ========================================================
@@ -169,6 +169,9 @@ public class MemoryService {
             );
 
             log.setActionTaken("BLOCKED");
+            log.setRiskLevel(memory.getRiskLevel());
+            log.setConfidence(analysisResult.getConfidence());
+            log.setAnalyzerType(analysisResult.getAnalyzerType());
 
             securityLogService.save(log);
 
@@ -184,7 +187,31 @@ public class MemoryService {
 
             memory.setStatus("REVIEW");
 
-            return memoryRepository.save(memory);
+            Memory savedMemory = memoryRepository.save(memory);
+            Long memoryId = (savedMemory != null) ? savedMemory.getId() : null;
+
+            SecurityLog log =
+                    new SecurityLog();
+
+            log.setMemoryId(memoryId);
+            log.setCorrelationId(correlationId);
+
+            log.setRiskScore(
+                    savedMemory != null ? savedMemory.getRiskScore() : memory.getRiskScore()
+            );
+
+            log.setThreatType(
+                    savedMemory != null ? savedMemory.getRiskCategory() : memory.getRiskCategory()
+            );
+
+            log.setActionTaken("REVIEW");
+            log.setRiskLevel(savedMemory != null ? savedMemory.getRiskLevel() : memory.getRiskLevel());
+            log.setConfidence(analysisResult.getConfidence());
+            log.setAnalyzerType(analysisResult.getAnalyzerType());
+
+            securityLogService.save(log);
+
+            return savedMemory != null ? savedMemory : memory;
         }
 
 
@@ -194,7 +221,31 @@ public class MemoryService {
 
         memory.setStatus("SAFE");
 
-        return memoryRepository.save(memory);
+        Memory savedMemory = memoryRepository.save(memory);
+        Long memoryId = (savedMemory != null) ? savedMemory.getId() : null;
+
+        SecurityLog log =
+                new SecurityLog();
+
+        log.setMemoryId(memoryId);
+        log.setCorrelationId(correlationId);
+
+        log.setRiskScore(
+                savedMemory != null ? savedMemory.getRiskScore() : memory.getRiskScore()
+        );
+
+        log.setThreatType(
+                savedMemory != null ? savedMemory.getRiskCategory() : memory.getRiskCategory()
+        );
+
+        log.setActionTaken("ALLOWED");
+        log.setRiskLevel(savedMemory != null ? savedMemory.getRiskLevel() : memory.getRiskLevel());
+        log.setConfidence(analysisResult.getConfidence());
+        log.setAnalyzerType(analysisResult.getAnalyzerType());
+
+        securityLogService.save(log);
+
+        return savedMemory != null ? savedMemory : memory;
     }
 
 
@@ -202,7 +253,7 @@ public class MemoryService {
     // SECURITY ANALYSIS
     // ============================================================
 
-    private void analyzeRisk(Memory memory) {
+    private SecurityAnalysisResult analyzeRisk(Memory memory) {
         List<java.util.concurrent.Future<SecurityAnalysisResult>> futures = new java.util.ArrayList<>();
         for (SecurityAnalyzer analyzer : securityAnalyzers) {
             futures.add(securityAnalysisExecutor.submit(() -> analyzer.analyze(memory.getContent())));
@@ -277,6 +328,8 @@ public class MemoryService {
         memory.setRiskReason(
                 result.getReason()
         );
+
+        return result;
     }
 
     private SecurityAnalysisResult createUnavailableResult(String reason) {

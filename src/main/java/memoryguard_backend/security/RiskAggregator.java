@@ -38,7 +38,7 @@ public class RiskAggregator {
                     fallback.getCategory(),
                     fallback.getReason(),
                     fallback.getConfidence(),
-                    "AGGREGATED"
+                    fallback.getAnalyzerType()
             );
         }
 
@@ -60,7 +60,7 @@ public class RiskAggregator {
                 highestRiskResult.getCategory(),
                 highestRiskResult.getReason(),
                 highestRiskResult.getConfidence(),
-                "AGGREGATED"
+                highestRiskResult.getAnalyzerType()
         );
     }
 

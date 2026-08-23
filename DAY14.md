@@ -165,5 +165,40 @@ We have successfully completed Stage 3 of the AI Semantic Security Layer:
   - Custom null/blank content formatting.
   - Leak-prevention checks asserting that API keys (e.g. `"API_KEY_SECRET_123"`) or raw memory content are completely filtered and absent from error reasons.
 
+---
+
+## 7. AI Semantic Layer — Stage 4A Sequential Multi-Analyzer Integration
+
+We have successfully completed Stage 4A of the AI Semantic Security Layer:
+
+### 7.1 Multi-Analyzer Dependency Injection
+- Refactored `MemoryService` to accept `List<SecurityAnalyzer>` in the constructor instead of a single analyzer bean. This automatically loads both `MemoryRiskAnalyzer` and `AISemanticSecurityAnalyzer` from the Spring application context.
+- Removed the temporary `@Primary` annotation from `MemoryRiskAnalyzer`, allowing clean collection-injection without autowire ambiguity.
+
+### 7.2 Sequential Analysis Execution
+- Updated `MemoryService.analyzeRisk()` to sequentially execute each injected `SecurityAnalyzer` bean:
+  ```java
+  for (SecurityAnalyzer analyzer : securityAnalyzers) {
+      SecurityAnalysisResult res = analyzer.analyze(memory.getContent());
+      results.add(res);
+  }
+  ```
+- Collects all resulting security signals and forwards them as a unified list to the `RiskAggregator` for combined assessment.
+
+### 7.3 Safety-First Aggregation Strategy
+- Updated `RiskAggregator.aggregate()` to evaluate both deterministic and semantic results under a safety-first maximum-score algorithm:
+  - Iterates and filters out any `SEMANTIC_UNAVAILABLE` results, ensuring that a disabled or failed AI service does not corrupt or degrade deterministic block calculations.
+  - If AI is disabled/unavailable, the deterministic rule result remains the final active result.
+  - Resolves highest score selection, protecting deterministic blocks from downgrade overrides (e.g. Rule = 95 / AI = 5 evaluates to score 95).
+  - Keeps policy decisions isolated inside `PolicyEngine`, which gating-evaluates only the aggregated outcome.
+
+### 7.4 Mock Aggregation Unit Tests
+- Created `MultiAnalyzerAggregationTests` covering 11 testing scenarios verifying:
+  - Aggregation cases with deterministic-only and both-analyzer lists.
+  - AI disabled and unavailable ignore-scenarios.
+  - Safety-first score selection combinations (Rule LOW + AI HIGH, Rule HIGH + AI LOW, Rule MEDIUM + AI HIGH, etc.).
+  - Non-downgrading security block assertions.
+
+
 
 

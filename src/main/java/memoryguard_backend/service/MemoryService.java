@@ -19,20 +19,20 @@ import java.util.Optional;
 public class MemoryService {
 
     private final MemoryRepository memoryRepository;
-    private final SecurityAnalyzer securityAnalyzer;
+    private final List<SecurityAnalyzer> securityAnalyzers;
     private final SecurityLogService securityLogService;
     private final PolicyEngine policyEngine;
     private final RiskAggregator riskAggregator;
 
     public MemoryService(
             MemoryRepository memoryRepository,
-            SecurityAnalyzer securityAnalyzer,
+            List<SecurityAnalyzer> securityAnalyzers,
             SecurityLogService securityLogService,
             PolicyEngine policyEngine,
             RiskAggregator riskAggregator) {
 
         this.memoryRepository = memoryRepository;
-        this.securityAnalyzer = securityAnalyzer;
+        this.securityAnalyzers = securityAnalyzers;
         this.securityLogService = securityLogService;
         this.policyEngine = policyEngine;
         this.riskAggregator = riskAggregator;
@@ -195,15 +195,15 @@ public class MemoryService {
     // ============================================================
 
     private void analyzeRisk(Memory memory) {
-
-        SecurityAnalysisResult ruleResult =
-                securityAnalyzer.analyze(
-                        memory.getContent()
-                );
+        List<SecurityAnalysisResult> results = new java.util.ArrayList<>();
+        for (SecurityAnalyzer analyzer : securityAnalyzers) {
+            SecurityAnalysisResult res = analyzer.analyze(memory.getContent());
+            results.add(res);
+        }
 
         SecurityAnalysisResult result =
                 riskAggregator.aggregate(
-                        List.of(ruleResult)
+                        results
                 );
 
 

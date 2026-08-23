@@ -11,24 +11,44 @@ public class RiskAggregator {
             List<SecurityAnalysisResult> results) {
 
         if (results == null || results.isEmpty()) {
-
             return new SecurityAnalysisResult(
                     "LOW",
                     0,
                     "NO_ANALYSIS",
                     "No security analysis results available",
                     0.0,
-                    "AGGREGATOR"
+                    "AGGREGATED"
             );
         }
 
-        int highestRiskScore = 0;
-        SecurityAnalysisResult highestRiskResult = null;
-
+        // Filter out unavailable semantic results
+        List<SecurityAnalysisResult> activeResults = new java.util.ArrayList<>();
         for (SecurityAnalysisResult result : results) {
+            if (result != null && !"SEMANTIC_UNAVAILABLE".equals(result.getCategory())) {
+                activeResults.add(result);
+            }
+        }
 
+        if (activeResults.isEmpty()) {
+            // Fallback: If all results are unavailable, return the first one
+            SecurityAnalysisResult fallback = results.get(0);
+            return new SecurityAnalysisResult(
+                    fallback.getRiskLevel(),
+                    fallback.getRiskScore(),
+                    fallback.getCategory(),
+                    fallback.getReason(),
+                    fallback.getConfidence(),
+                    "AGGREGATED"
+            );
+        }
+
+        // Apply safety-first maximum-score strategy
+        SecurityAnalysisResult highestRiskResult = activeResults.get(0);
+        int highestRiskScore = highestRiskResult.getRiskScore();
+
+        for (int i = 1; i < activeResults.size(); i++) {
+            SecurityAnalysisResult result = activeResults.get(i);
             if (result.getRiskScore() > highestRiskScore) {
-
                 highestRiskScore = result.getRiskScore();
                 highestRiskResult = result;
             }

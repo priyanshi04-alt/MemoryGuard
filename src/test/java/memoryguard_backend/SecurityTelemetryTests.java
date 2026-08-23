@@ -325,4 +325,52 @@ class SecurityTelemetryTests {
         assertFalse(stringLog.contains("API_KEY_SECRET_123"));
         assertFalse(stringLog.contains("RAW_GEMINI_RESPONSE"));
     }
+
+    @Test
+    void testClientCannotForgeTelemetry() {
+        SecurityAnalyzer mockRuleAnalyzer = content -> new SecurityAnalysisResult("LOW", 10, "NONE", "Rule safe", 1.0, "RULE");
+
+        MemoryService service = new MemoryService(
+                memoryRepository,
+                List.of(mockRuleAnalyzer),
+                securityLogService,
+                policyEngine,
+                riskAggregator,
+                testExecutor,
+                testProperties
+        );
+
+        Memory memory = new Memory();
+        memory.setContent("SAFE CONTENT");
+        memory.setAgentId(1L);
+        memory.setMemoryType("CORE");
+        
+        // Client attempts to forge properties:
+        memory.setRiskScore(99);
+        memory.setRiskLevel("HIGH");
+        memory.setRiskCategory("MALWARE");
+        memory.setStatus("BLOCKED");
+        memory.setCorrelationId("hacked-id-123");
+
+        service.createMemory(memory);
+
+        ArgumentCaptor<SecurityLog> logCaptor = ArgumentCaptor.forClass(SecurityLog.class);
+        verify(securityLogRepository, times(1)).save(logCaptor.capture());
+
+        SecurityLog log = logCaptor.getValue();
+        assertNotNull(log);
+        
+        // Assert that client-forged correlationId is overwritten:
+        assertNotEquals("hacked-id-123", log.getCorrelationId());
+        assertNotEquals("hacked-id-123", memory.getCorrelationId());
+        assertEquals(memory.getCorrelationId(), log.getCorrelationId());
+
+        // Assert that riskScore and level are calculated and overwritten:
+        assertEquals(10, log.getRiskScore());
+        assertEquals("LOW", log.getRiskLevel());
+        assertEquals("NONE", log.getThreatType());
+        
+        // Status is ALLOWED, not BLOCKED:
+        assertEquals("ALLOWED", log.getActionTaken());
+    }
 }

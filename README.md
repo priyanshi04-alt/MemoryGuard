@@ -138,6 +138,15 @@ Additional testing will be added as the platform evolves.
 * Security telemetry foundation
 * Security validation tests
 * Project documentation
+* End-to-end Memory Gateway flow (Day 16)
+* Memory Gateway input validation (Day 17)
+
+### 🛡️ Day 17 — Memory Gateway Validation
+
+* **Memory Gateway Input Validation**: Added boundary input validation for incoming memory payloads prior to correlation ID generation, hash calculation, security analysis, policy evaluation, and persistence.
+* **Rejected Invalid Memory Inputs**: Rejects `null` memory requests, `null` content, empty strings, whitespace-only content, and content exceeding the 10,000-character limit with descriptive `IllegalArgumentException` messages.
+* **Pre-Analysis Security Boundary**: Validation executes as the first operation in `MemoryService.createMemory()`, preventing wasted analysis compute and denial-of-service attempts.
+* **Automated Tests & Regression Status**: Added comprehensive tests in `MemoryGatewayFlowTests` verifying null, empty, whitespace, max-length boundary, and oversized inputs. All 79 backend tests pass with zero failures or regressions.
 
 ### In Development
 

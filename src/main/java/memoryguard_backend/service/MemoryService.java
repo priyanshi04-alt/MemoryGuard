@@ -46,7 +46,6 @@ public class MemoryService {
         this.securityAnalysisProperties = securityAnalysisProperties;
     }
 
-
     // ============================================================
     // GET ALL MEMORIES
     // ============================================================
@@ -56,7 +55,9 @@ public class MemoryService {
     }
 
     public List<Memory> getMemoriesByStatus(String status) {
+
         List<Memory> memories;
+
         if ("ALL".equalsIgnoreCase(status)) {
             memories = memoryRepository.findAll();
         } else {
@@ -69,7 +70,6 @@ public class MemoryService {
 
         return memories;
     }
-
 
     // ============================================================
     // GET MEMORY BY ID
@@ -87,7 +87,6 @@ public class MemoryService {
         return memory;
     }
 
-
     // ============================================================
     // VERIFY MEMORY INTEGRITY
     // ============================================================
@@ -104,6 +103,33 @@ public class MemoryService {
         );
     }
 
+    // ============================================================
+    // MEMORY GATEWAY VALIDATION
+    // ============================================================
+
+    private void validateIncomingMemory(Memory memory) {
+
+        if (memory == null) {
+            throw new IllegalArgumentException(
+                    "Memory request cannot be null"
+            );
+        }
+
+        if (memory.getContent() == null ||
+                memory.getContent().trim().isEmpty()) {
+
+            throw new IllegalArgumentException(
+                    "Memory content cannot be empty"
+            );
+        }
+
+        if (memory.getContent().length() > 10000) {
+
+            throw new IllegalArgumentException(
+                    "Memory content exceeds maximum allowed size"
+            );
+        }
+    }
 
     // ============================================================
     // CREATE MEMORY
@@ -111,11 +137,23 @@ public class MemoryService {
 
     public Memory createMemory(Memory memory) {
 
-        String correlationId = java.util.UUID.randomUUID().toString();
+        // ========================================================
+        // 0. MEMORY GATEWAY VALIDATION
+        // ========================================================
+
+        validateIncomingMemory(memory);
+
+        // ========================================================
+        // 1. GENERATE CORRELATION ID
+        // ========================================================
+
+        String correlationId =
+                java.util.UUID.randomUUID().toString();
+
         memory.setCorrelationId(correlationId);
 
         // ========================================================
-        // 1. GENERATE INTEGRITY HASH
+        // 2. GENERATE INTEGRITY HASH
         // ========================================================
 
         String hash =
@@ -125,16 +163,15 @@ public class MemoryService {
 
         memory.setIntegrityHash(hash);
 
+        // ========================================================
+        // 3. SECURITY ANALYSIS
+        // ========================================================
+
+        SecurityAnalysisResult analysisResult =
+                analyzeRisk(memory);
 
         // ========================================================
-        // 2. SECURITY ANALYSIS
-        // ========================================================
-
-        SecurityAnalysisResult analysisResult = analyzeRisk(memory);
-
-
-        // ========================================================
-        // 3. POLICY DECISION
+        // 4. POLICY DECISION
         // ========================================================
 
         PolicyDecision decision =
@@ -142,9 +179,8 @@ public class MemoryService {
                         memory.getRiskScore()
                 );
 
-
         // ========================================================
-        // 4. BLOCK HIGH-RISK MEMORY
+        // 5. BLOCK HIGH-RISK MEMORY
         // ========================================================
 
         if (decision == PolicyDecision.BLOCK) {
@@ -169,26 +205,38 @@ public class MemoryService {
             );
 
             log.setActionTaken("BLOCKED");
-            log.setRiskLevel(memory.getRiskLevel());
-            log.setConfidence(analysisResult.getConfidence());
-            log.setAnalyzerType(analysisResult.getAnalyzerType());
+            log.setRiskLevel(
+                    memory.getRiskLevel()
+            );
+
+            log.setConfidence(
+                    analysisResult.getConfidence()
+            );
+
+            log.setAnalyzerType(
+                    analysisResult.getAnalyzerType()
+            );
 
             securityLogService.save(log);
 
             return memory;
         }
 
-
         // ========================================================
-        // 5. REVIEW MEDIUM-RISK MEMORY
+        // 6. REVIEW MEDIUM-RISK MEMORY
         // ========================================================
 
         if (decision == PolicyDecision.REVIEW) {
 
             memory.setStatus("REVIEW");
 
-            Memory savedMemory = memoryRepository.save(memory);
-            Long memoryId = (savedMemory != null) ? savedMemory.getId() : null;
+            Memory savedMemory =
+                    memoryRepository.save(memory);
+
+            Long memoryId =
+                    (savedMemory != null)
+                            ? savedMemory.getId()
+                            : null;
 
             SecurityLog log =
                     new SecurityLog();
@@ -197,32 +245,53 @@ public class MemoryService {
             log.setCorrelationId(correlationId);
 
             log.setRiskScore(
-                    savedMemory != null ? savedMemory.getRiskScore() : memory.getRiskScore()
+                    savedMemory != null
+                            ? savedMemory.getRiskScore()
+                            : memory.getRiskScore()
             );
 
             log.setThreatType(
-                    savedMemory != null ? savedMemory.getRiskCategory() : memory.getRiskCategory()
+                    savedMemory != null
+                            ? savedMemory.getRiskCategory()
+                            : memory.getRiskCategory()
             );
 
             log.setActionTaken("REVIEW");
-            log.setRiskLevel(savedMemory != null ? savedMemory.getRiskLevel() : memory.getRiskLevel());
-            log.setConfidence(analysisResult.getConfidence());
-            log.setAnalyzerType(analysisResult.getAnalyzerType());
+
+            log.setRiskLevel(
+                    savedMemory != null
+                            ? savedMemory.getRiskLevel()
+                            : memory.getRiskLevel()
+            );
+
+            log.setConfidence(
+                    analysisResult.getConfidence()
+            );
+
+            log.setAnalyzerType(
+                    analysisResult.getAnalyzerType()
+            );
 
             securityLogService.save(log);
 
-            return savedMemory != null ? savedMemory : memory;
+            return savedMemory != null
+                    ? savedMemory
+                    : memory;
         }
 
-
         // ========================================================
-        // 6. ALLOW LOW-RISK MEMORY
+        // 7. ALLOW LOW-RISK MEMORY
         // ========================================================
 
         memory.setStatus("SAFE");
 
-        Memory savedMemory = memoryRepository.save(memory);
-        Long memoryId = (savedMemory != null) ? savedMemory.getId() : null;
+        Memory savedMemory =
+                memoryRepository.save(memory);
+
+        Long memoryId =
+                (savedMemory != null)
+                        ? savedMemory.getId()
+                        : null;
 
         SecurityLog log =
                 new SecurityLog();
@@ -231,68 +300,149 @@ public class MemoryService {
         log.setCorrelationId(correlationId);
 
         log.setRiskScore(
-                savedMemory != null ? savedMemory.getRiskScore() : memory.getRiskScore()
+                savedMemory != null
+                        ? savedMemory.getRiskScore()
+                        : memory.getRiskScore()
         );
 
         log.setThreatType(
-                savedMemory != null ? savedMemory.getRiskCategory() : memory.getRiskCategory()
+                savedMemory != null
+                        ? savedMemory.getRiskCategory()
+                        : memory.getRiskCategory()
         );
 
         log.setActionTaken("ALLOWED");
-        log.setRiskLevel(savedMemory != null ? savedMemory.getRiskLevel() : memory.getRiskLevel());
-        log.setConfidence(analysisResult.getConfidence());
-        log.setAnalyzerType(analysisResult.getAnalyzerType());
+
+        log.setRiskLevel(
+                savedMemory != null
+                        ? savedMemory.getRiskLevel()
+                        : memory.getRiskLevel()
+        );
+
+        log.setConfidence(
+                analysisResult.getConfidence()
+        );
+
+        log.setAnalyzerType(
+                analysisResult.getAnalyzerType()
+        );
 
         securityLogService.save(log);
 
-        return savedMemory != null ? savedMemory : memory;
+        return savedMemory != null
+                ? savedMemory
+                : memory;
     }
-
 
     // ============================================================
     // SECURITY ANALYSIS
     // ============================================================
 
     private SecurityAnalysisResult analyzeRisk(Memory memory) {
-        List<java.util.concurrent.Future<SecurityAnalysisResult>> futures = new java.util.ArrayList<>();
+
+        List<java.util.concurrent.Future<SecurityAnalysisResult>>
+                futures = new java.util.ArrayList<>();
+
         for (SecurityAnalyzer analyzer : securityAnalyzers) {
-            futures.add(securityAnalysisExecutor.submit(() -> analyzer.analyze(memory.getContent())));
+
+            futures.add(
+                    securityAnalysisExecutor.submit(
+                            () -> analyzer.analyze(
+                                    memory.getContent()
+                            )
+                    )
+            );
         }
 
-        List<SecurityAnalysisResult> results = new java.util.ArrayList<>();
-        for (int i = 0; i < securityAnalyzers.size(); i++) {
-            SecurityAnalyzer analyzer = securityAnalyzers.get(i);
-            java.util.concurrent.Future<SecurityAnalysisResult> future = futures.get(i);
+        List<SecurityAnalysisResult> results =
+                new java.util.ArrayList<>();
+
+        for (int i = 0;
+             i < securityAnalyzers.size();
+             i++) {
+
+            SecurityAnalyzer analyzer =
+                    securityAnalyzers.get(i);
+
+            java.util.concurrent.Future<SecurityAnalysisResult>
+                    future = futures.get(i);
+
             try {
-                SecurityAnalysisResult res = future.get(securityAnalysisProperties.getTimeoutMs(), java.util.concurrent.TimeUnit.MILLISECONDS);
+
+                SecurityAnalysisResult res =
+                        future.get(
+                                securityAnalysisProperties
+                                        .getTimeoutMs(),
+                                java.util.concurrent.TimeUnit.MILLISECONDS
+                        );
+
                 results.add(res);
-            } catch (java.util.concurrent.TimeoutException e) {
+
+            } catch (
+                    java.util.concurrent.TimeoutException e) {
+
                 future.cancel(true);
-                if (!"SEMANTIC".equals(analyzer.getAnalyzerType())) {
-                    throw new RuntimeException("Deterministic security analysis timed out", e);
+
+                if (!"SEMANTIC".equals(
+                        analyzer.getAnalyzerType())) {
+
+                    throw new RuntimeException(
+                            "Deterministic security analysis timed out",
+                            e
+                    );
+
                 } else {
-                    results.add(createUnavailableResult("AI Semantic analysis timed out"));
+
+                    results.add(
+                            createUnavailableResult(
+                                    "AI Semantic analysis timed out"
+                            )
+                    );
                 }
-            } catch (java.util.concurrent.ExecutionException e) {
-                if (!"SEMANTIC".equals(analyzer.getAnalyzerType())) {
-                    throw new RuntimeException("Deterministic security analysis failed", e.getCause());
+
+            } catch (
+                    java.util.concurrent.ExecutionException e) {
+
+                if (!"SEMANTIC".equals(
+                        analyzer.getAnalyzerType())) {
+
+                    throw new RuntimeException(
+                            "Deterministic security analysis failed",
+                            e.getCause()
+                    );
+
                 } else {
-                    results.add(createUnavailableResult("AI Semantic analysis failed"));
+
+                    results.add(
+                            createUnavailableResult(
+                                    "AI Semantic analysis failed"
+                            )
+                    );
                 }
+
             } catch (Exception e) {
-                if (!"SEMANTIC".equals(analyzer.getAnalyzerType())) {
-                    throw new RuntimeException("Deterministic security analysis interrupted or failed", e);
+
+                if (!"SEMANTIC".equals(
+                        analyzer.getAnalyzerType())) {
+
+                    throw new RuntimeException(
+                            "Deterministic security analysis interrupted or failed",
+                            e
+                    );
+
                 } else {
-                    results.add(createUnavailableResult("AI Semantic analysis failed"));
+
+                    results.add(
+                            createUnavailableResult(
+                                    "AI Semantic analysis failed"
+                            )
+                    );
                 }
             }
         }
 
         SecurityAnalysisResult result =
-                riskAggregator.aggregate(
-                        results
-                );
-
+                riskAggregator.aggregate(results);
 
         // ========================================================
         // RISK LEVEL
@@ -302,7 +452,6 @@ public class MemoryService {
                 result.getRiskLevel()
         );
 
-
         // ========================================================
         // RISK SCORE
         // ========================================================
@@ -311,7 +460,6 @@ public class MemoryService {
                 result.getRiskScore()
         );
 
-
         // ========================================================
         // THREAT CATEGORY
         // ========================================================
@@ -319,7 +467,6 @@ public class MemoryService {
         memory.setRiskCategory(
                 result.getCategory()
         );
-
 
         // ========================================================
         // EXPLANATION
@@ -332,7 +479,13 @@ public class MemoryService {
         return result;
     }
 
-    private SecurityAnalysisResult createUnavailableResult(String reason) {
+    // ============================================================
+    // SEMANTIC ANALYSIS FALLBACK
+    // ============================================================
+
+    private SecurityAnalysisResult createUnavailableResult(
+            String reason) {
+
         return new SecurityAnalysisResult(
                 "LOW",
                 0,
@@ -343,10 +496,21 @@ public class MemoryService {
         );
     }
 
-    public memoryguard_backend.controller.MemoryController.MemoryStats getMemoryStats() {
-        long totalTrusted = memoryRepository.countByStatus("SAFE");
-        long needsReview = memoryRepository.countByStatus("REVIEW");
-        long blockedAttempts = securityLogService.countByAction("BLOCKED");
+    // ============================================================
+    // MEMORY STATISTICS
+    // ============================================================
+
+    public memoryguard_backend.controller.MemoryController.MemoryStats
+    getMemoryStats() {
+
+        long totalTrusted =
+                memoryRepository.countByStatus("SAFE");
+
+        long needsReview =
+                memoryRepository.countByStatus("REVIEW");
+
+        long blockedAttempts =
+                securityLogService.countByAction("BLOCKED");
 
         return new memoryguard_backend.controller.MemoryController.MemoryStats(
                 totalTrusted,

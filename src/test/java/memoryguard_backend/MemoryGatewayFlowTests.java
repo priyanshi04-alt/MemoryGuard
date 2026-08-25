@@ -234,4 +234,111 @@ class MemoryGatewayFlowTests {
         assertEquals(3L, stats.riskDistribution().medium());
         assertEquals(7L, stats.riskDistribution().high());
     }
+
+    // ============================================================
+    // MEMORY GATEWAY VALIDATION TESTS
+    // ============================================================
+
+    @Test
+    void testValidateIncomingMemory_NullMemory() {
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> memoryService.createMemory(null)
+        );
+        assertEquals("Memory request cannot be null", exception.getMessage());
+        verifyNoInteractions(memoryRepository);
+        verifyNoInteractions(securityLogRepository);
+    }
+
+    @Test
+    void testValidateIncomingMemory_NullContent() {
+        Memory memory = new Memory();
+        memory.setAgentId(1L);
+        memory.setContent(null);
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> memoryService.createMemory(memory)
+        );
+        assertEquals("Memory content cannot be empty", exception.getMessage());
+        verifyNoInteractions(memoryRepository);
+        verifyNoInteractions(securityLogRepository);
+    }
+
+    @Test
+    void testValidateIncomingMemory_EmptyContent() {
+        Memory memory = new Memory();
+        memory.setAgentId(1L);
+        memory.setContent("");
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> memoryService.createMemory(memory)
+        );
+        assertEquals("Memory content cannot be empty", exception.getMessage());
+        verifyNoInteractions(memoryRepository);
+        verifyNoInteractions(securityLogRepository);
+    }
+
+    @Test
+    void testValidateIncomingMemory_WhitespaceOnlyContent() {
+        Memory memory = new Memory();
+        memory.setAgentId(1L);
+        memory.setContent("   \t\n   ");
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> memoryService.createMemory(memory)
+        );
+        assertEquals("Memory content cannot be empty", exception.getMessage());
+        verifyNoInteractions(memoryRepository);
+        verifyNoInteractions(securityLogRepository);
+    }
+
+    @Test
+    void testValidateIncomingMemory_ContentExceeding10000Chars() {
+        Memory memory = new Memory();
+        memory.setAgentId(1L);
+        memory.setContent("A".repeat(10001));
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> memoryService.createMemory(memory)
+        );
+        assertEquals("Memory content exceeds maximum allowed size", exception.getMessage());
+        verifyNoInteractions(memoryRepository);
+        verifyNoInteractions(securityLogRepository);
+    }
+
+    @Test
+    void testValidateIncomingMemory_ValidContentReachesPipeline() {
+        Memory memory = new Memory();
+        memory.setAgentId(1L);
+        memory.setContent("User prefers Java for DSA practice");
+
+        Memory result = memoryService.createMemory(memory);
+
+        assertNotNull(result);
+        assertNotNull(result.getCorrelationId());
+        assertNotNull(result.getIntegrityHash());
+        assertEquals("SAFE", result.getStatus());
+        assertEquals("LOW", result.getRiskLevel());
+        verify(memoryRepository, times(1)).save(any(Memory.class));
+        verify(securityLogRepository, times(1)).save(any(SecurityLog.class));
+    }
+
+    @Test
+    void testValidateIncomingMemory_ExactMaxLengthBoundary_Accepted() {
+        Memory memory = new Memory();
+        memory.setAgentId(1L);
+        memory.setContent("A".repeat(10000));
+
+        Memory result = memoryService.createMemory(memory);
+
+        assertNotNull(result);
+        assertNotNull(result.getCorrelationId());
+        assertNotNull(result.getIntegrityHash());
+        verify(memoryRepository, times(1)).save(any(Memory.class));
+        verify(securityLogRepository, times(1)).save(any(SecurityLog.class));
+    }
 }

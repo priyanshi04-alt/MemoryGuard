@@ -33,6 +33,9 @@ public class SecurityLog {
 
     private Double confidence;
 
+    @Column(length = 30)
+    private String provenance;
+
 
     public SecurityLog() {
     }
@@ -114,5 +117,13 @@ public class SecurityLog {
 
     public void setConfidence(Double confidence) {
         this.confidence = confidence;
+    }
+
+    public String getProvenance() {
+        return provenance;
+    }
+
+    public void setProvenance(String provenance) {
+        this.provenance = provenance;
     }
 }

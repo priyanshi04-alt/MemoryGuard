@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import API_BASE_URL from '../config/api'
 
 function Dashboard() {
   const [memories, setMemories] = useState([])
@@ -14,13 +15,13 @@ function Dashboard() {
 
   useEffect(() => {
     Promise.all([
-      fetch('http://localhost:8081/api/memories?status=ALL').then((response) => {
+      fetch(`${API_BASE_URL}/api/memories?status=ALL`).then((response) => {
         if (!response.ok) {
           throw new Error('Failed to fetch memories')
         }
         return response.json()
       }),
-      fetch('http://localhost:8081/api/memories/stats').then((response) => {
+      fetch(`${API_BASE_URL}/api/memories/stats`).then((response) => {
         if (!response.ok) {
           throw new Error('Failed to fetch statistics')
         }

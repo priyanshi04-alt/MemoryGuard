@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import API_BASE_URL from '../config/api'
 
 function MemoryAnalysis() {
   const [memory, setMemory] = useState('')
@@ -23,7 +24,7 @@ function MemoryAnalysis() {
     }
 
     try {
-      const response = await fetch('http://localhost:8081/api/memories', {
+      const response = await fetch(`${API_BASE_URL}/api/memories`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

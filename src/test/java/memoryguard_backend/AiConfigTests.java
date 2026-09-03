@@ -42,9 +42,10 @@ class AiConfigTests {
         ApplicationContextRunner runner = new ApplicationContextRunner()
                 .withUserConfiguration(MemoryguardBackendApplication.class)
                 .withPropertyValues(
-                        "spring.datasource.url=jdbc:postgresql://localhost:5432/memoryguard",
-                        "spring.datasource.username=postgres",
-                        "spring.datasource.password=041128",
+                        "spring.datasource.url=jdbc:h2:mem:test_ai_config;DB_CLOSE_DELAY=-1",
+                        "spring.datasource.driver-class-name=org.h2.Driver",
+                        "spring.datasource.username=sa",
+                        "spring.datasource.password=",
                         "memoryguard.ai.enabled=true",
                         "memoryguard.ai.api-key="
                 );

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import API_BASE_URL from '../config/api'
 
 function SecurityLogs() {
   const [logs, setLogs] = useState([])
@@ -6,7 +7,7 @@ function SecurityLogs() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    fetch('http://localhost:8081/api/security-logs')
+    fetch(`${API_BASE_URL}/api/security-logs`)
       .then((response) => {
         if (!response.ok) {
           throw new Error('Failed to fetch security logs')

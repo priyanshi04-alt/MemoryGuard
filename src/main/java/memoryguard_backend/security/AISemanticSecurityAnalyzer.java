@@ -1,16 +1,37 @@
 package memoryguard_backend.security;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
+import java.util.Collections;
+
+/**
+ * Primary semantic security analyzer bean.
+ * Bridges external AI services (e.g. GeminiAIService) with the provider-agnostic
+ * SemanticSecurityAnalyzer interface and fallbacks to BaselineSemanticAnalyzer.
+ */
 @Component
-public class AISemanticSecurityAnalyzer implements SecurityAnalyzer {
+@Primary
+public class AISemanticSecurityAnalyzer implements SemanticSecurityAnalyzer {
 
     private final AIService aiService;
     private final AiConfigProperties aiConfigProperties;
+    private final BaselineSemanticAnalyzer baselineAnalyzer;
 
-    public AISemanticSecurityAnalyzer(AIService aiService, AiConfigProperties aiConfigProperties) {
+    @Autowired
+    public AISemanticSecurityAnalyzer(
+            AIService aiService,
+            AiConfigProperties aiConfigProperties,
+            BaselineSemanticAnalyzer baselineAnalyzer) {
+
         this.aiService = aiService;
         this.aiConfigProperties = aiConfigProperties;
+        this.baselineAnalyzer = baselineAnalyzer != null ? baselineAnalyzer : new BaselineSemanticAnalyzer();
+    }
+
+    public AISemanticSecurityAnalyzer(AIService aiService, AiConfigProperties aiConfigProperties) {
+        this(aiService, aiConfigProperties, new BaselineSemanticAnalyzer());
     }
 
     @Override
@@ -22,39 +43,40 @@ public class AISemanticSecurityAnalyzer implements SecurityAnalyzer {
     public SecurityAnalysisResult analyze(String content) {
         // 1. Check if AI is disabled
         if (!aiConfigProperties.isEnabled()) {
-            return createUnavailableResult("AI Semantic Analysis is disabled");
+            return SemanticAnalysisResult.unavailable("AI Semantic Analysis is disabled");
         }
 
         // 2. Null or blank content checks
         if (content == null || content.trim().isEmpty()) {
-            return new SecurityAnalysisResult(
-                    "LOW",
-                    0,
-                    "EMPTY_CONTENT",
-                    "Input content is null or blank",
-                    1.0,
-                    "SEMANTIC"
-            );
+            return SemanticAnalysisResult.emptyContent();
         }
 
         // 3. Evaluate content through AIService with fail-safe boundaries
         try {
-            return aiService.evaluate(content);
+            SecurityAnalysisResult baseResult = aiService.evaluate(content);
+            if (baseResult instanceof SemanticAnalysisResult) {
+                return baseResult;
+            }
+            return new SemanticAnalysisResult(
+                    true,
+                    baseResult.getRiskLevel(),
+                    baseResult.getRiskScore(),
+                    baseResult.getCategory(),
+                    baseResult.getReason(),
+                    baseResult.getConfidence(),
+                    Collections.emptyList(),
+                    baseResult.getAnalyzerType(),
+                    "1.0.0",
+                    Collections.emptyMap()
+            );
         } catch (AIServiceException e) {
-            return createUnavailableResult("Semantic analysis is currently unavailable");
+            return SemanticAnalysisResult.unavailable("Semantic analysis is currently unavailable");
         } catch (Exception e) {
-            return createUnavailableResult("Semantic analysis encountered an unexpected error");
+            return SemanticAnalysisResult.unavailable("Semantic analysis encountered an unexpected error");
         }
     }
 
-    private SecurityAnalysisResult createUnavailableResult(String reason) {
-        return new SecurityAnalysisResult(
-                "LOW",
-                0,
-                "SEMANTIC_UNAVAILABLE",
-                reason,
-                0.0,
-                "SEMANTIC"
-        );
+    public BaselineSemanticAnalyzer getBaselineAnalyzer() {
+        return baselineAnalyzer;
     }
 }

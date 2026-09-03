@@ -6,11 +6,19 @@ import memoryguard_backend.repository.MemoryRepository;
 import memoryguard_backend.security.HashUtil;
 import memoryguard_backend.security.PolicyDecision;
 import memoryguard_backend.security.PolicyEngine;
+import memoryguard_backend.security.ProvenanceAnalysisResult;
+import memoryguard_backend.security.ProvenanceAnalyzer;
 import memoryguard_backend.security.RiskAggregator;
 import memoryguard_backend.security.SecurityAnalysisResult;
 import memoryguard_backend.security.SecurityAnalyzer;
 import memoryguard_backend.security.SecurityAnalysisProperties;
 
+import memoryguard_backend.security.signals.SecuritySignalExtractor;
+import memoryguard_backend.security.signals.SecuritySignals;
+import memoryguard_backend.security.content.MemoryContentAnalyzer;
+import memoryguard_backend.security.content.ContentAnalysisResult;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -22,11 +30,88 @@ public class MemoryService {
 
     private final MemoryRepository memoryRepository;
     private final List<SecurityAnalyzer> securityAnalyzers;
+    private final ProvenanceAnalyzer provenanceAnalyzer;
+    private final SecuritySignalExtractor securitySignalExtractor;
+    private final MemoryContentAnalyzer memoryContentAnalyzer;
     private final SecurityLogService securityLogService;
     private final PolicyEngine policyEngine;
     private final RiskAggregator riskAggregator;
     private final ExecutorService securityAnalysisExecutor;
     private final SecurityAnalysisProperties securityAnalysisProperties;
+
+    @Autowired
+    public MemoryService(
+            MemoryRepository memoryRepository,
+            List<SecurityAnalyzer> securityAnalyzers,
+            ProvenanceAnalyzer provenanceAnalyzer,
+            SecuritySignalExtractor securitySignalExtractor,
+            MemoryContentAnalyzer memoryContentAnalyzer,
+            SecurityLogService securityLogService,
+            PolicyEngine policyEngine,
+            RiskAggregator riskAggregator,
+            ExecutorService securityAnalysisExecutor,
+            SecurityAnalysisProperties securityAnalysisProperties) {
+
+        this.memoryRepository = memoryRepository;
+        this.securityAnalyzers = securityAnalyzers;
+        this.provenanceAnalyzer = provenanceAnalyzer;
+        this.securitySignalExtractor = securitySignalExtractor != null ? securitySignalExtractor : new SecuritySignalExtractor();
+        this.memoryContentAnalyzer = memoryContentAnalyzer != null ? memoryContentAnalyzer : new MemoryContentAnalyzer();
+        this.securityLogService = securityLogService;
+        this.policyEngine = policyEngine;
+        this.riskAggregator = riskAggregator;
+        this.securityAnalysisExecutor = securityAnalysisExecutor;
+        this.securityAnalysisProperties = securityAnalysisProperties;
+    }
+
+    public MemoryService(
+            MemoryRepository memoryRepository,
+            List<SecurityAnalyzer> securityAnalyzers,
+            ProvenanceAnalyzer provenanceAnalyzer,
+            SecuritySignalExtractor securitySignalExtractor,
+            SecurityLogService securityLogService,
+            PolicyEngine policyEngine,
+            RiskAggregator riskAggregator,
+            ExecutorService securityAnalysisExecutor,
+            SecurityAnalysisProperties securityAnalysisProperties) {
+
+        this(
+                memoryRepository,
+                securityAnalyzers,
+                provenanceAnalyzer,
+                securitySignalExtractor,
+                new MemoryContentAnalyzer(),
+                securityLogService,
+                policyEngine,
+                riskAggregator,
+                securityAnalysisExecutor,
+                securityAnalysisProperties
+        );
+    }
+
+    public MemoryService(
+            MemoryRepository memoryRepository,
+            List<SecurityAnalyzer> securityAnalyzers,
+            ProvenanceAnalyzer provenanceAnalyzer,
+            SecurityLogService securityLogService,
+            PolicyEngine policyEngine,
+            RiskAggregator riskAggregator,
+            ExecutorService securityAnalysisExecutor,
+            SecurityAnalysisProperties securityAnalysisProperties) {
+
+        this(
+                memoryRepository,
+                securityAnalyzers,
+                provenanceAnalyzer,
+                new SecuritySignalExtractor(),
+                new MemoryContentAnalyzer(),
+                securityLogService,
+                policyEngine,
+                riskAggregator,
+                securityAnalysisExecutor,
+                securityAnalysisProperties
+        );
+    }
 
     public MemoryService(
             MemoryRepository memoryRepository,
@@ -37,13 +122,18 @@ public class MemoryService {
             ExecutorService securityAnalysisExecutor,
             SecurityAnalysisProperties securityAnalysisProperties) {
 
-        this.memoryRepository = memoryRepository;
-        this.securityAnalyzers = securityAnalyzers;
-        this.securityLogService = securityLogService;
-        this.policyEngine = policyEngine;
-        this.riskAggregator = riskAggregator;
-        this.securityAnalysisExecutor = securityAnalysisExecutor;
-        this.securityAnalysisProperties = securityAnalysisProperties;
+        this(
+                memoryRepository,
+                securityAnalyzers,
+                new ProvenanceAnalyzer(),
+                new SecuritySignalExtractor(),
+                new MemoryContentAnalyzer(),
+                securityLogService,
+                policyEngine,
+                riskAggregator,
+                securityAnalysisExecutor,
+                securityAnalysisProperties
+        );
     }
 
     // ============================================================
@@ -104,6 +194,37 @@ public class MemoryService {
     }
 
     // ============================================================
+    // DAY 17 - MEMORY CONTENT SECURITY ANALYSIS
+    // ============================================================
+
+    public ContentAnalysisResult analyzeContent(String content) {
+        return memoryContentAnalyzer.analyze(content);
+    }
+
+    public ContentAnalysisResult analyzeContent(Memory memory) {
+        if (memory == null) {
+            throw new IllegalArgumentException("Memory request cannot be null");
+        }
+        return memoryContentAnalyzer.analyze(memory.getContent());
+    }
+
+    // ============================================================
+    // DAY 19 - SECURITY SIGNAL EXTRACTION
+    // ============================================================
+
+    public SecuritySignals extractSecuritySignals(Memory memory) {
+        if (memory == null) {
+            throw new IllegalArgumentException("Memory request cannot be null");
+        }
+        return securitySignalExtractor.extract(memory);
+    }
+
+    public Optional<SecuritySignals> extractSecuritySignals(Long id) {
+        return memoryRepository.findById(id)
+                .map(securitySignalExtractor::extract);
+    }
+
+    // ============================================================
     // MEMORY GATEWAY VALIDATION
     // ============================================================
 
@@ -144,6 +265,13 @@ public class MemoryService {
         validateIncomingMemory(memory);
 
         // ========================================================
+        // 0.5. MEMORY CONTENT SECURITY ANALYSIS (DAY 17)
+        // ========================================================
+
+        ContentAnalysisResult contentAnalysisResult =
+                memoryContentAnalyzer.analyze(memory.getContent());
+
+        // ========================================================
         // 1. GENERATE CORRELATION ID
         // ========================================================
 
@@ -164,14 +292,28 @@ public class MemoryService {
         memory.setIntegrityHash(hash);
 
         // ========================================================
-        // 3. SECURITY ANALYSIS
+        // 3. PROVENANCE ANALYSIS
+        // ========================================================
+
+        ProvenanceAnalysisResult provenanceResult =
+                provenanceAnalyzer.analyze(memory);
+
+        // ========================================================
+        // 3.5. SECURITY SIGNAL EXTRACTION (DAY 19)
+        // ========================================================
+
+        SecuritySignals securitySignals =
+                securitySignalExtractor.extract(memory);
+
+        // ========================================================
+        // 4. SECURITY ANALYSIS
         // ========================================================
 
         SecurityAnalysisResult analysisResult =
-                analyzeRisk(memory);
+                analyzeRisk(memory, provenanceResult);
 
         // ========================================================
-        // 4. POLICY DECISION
+        // 5. POLICY DECISION
         // ========================================================
 
         PolicyDecision decision =
@@ -180,7 +322,7 @@ public class MemoryService {
                 );
 
         // ========================================================
-        // 5. BLOCK HIGH-RISK MEMORY
+        // 6. BLOCK HIGH-RISK MEMORY
         // ========================================================
 
         if (decision == PolicyDecision.BLOCK) {
@@ -217,13 +359,19 @@ public class MemoryService {
                     analysisResult.getAnalyzerType()
             );
 
+            log.setProvenance(
+                    memory.getProvenance() != null
+                            ? memory.getProvenance().name()
+                            : "UNKNOWN"
+            );
+
             securityLogService.save(log);
 
             return memory;
         }
 
         // ========================================================
-        // 6. REVIEW MEDIUM-RISK MEMORY
+        // 7. REVIEW MEDIUM-RISK MEMORY
         // ========================================================
 
         if (decision == PolicyDecision.REVIEW) {
@@ -272,6 +420,12 @@ public class MemoryService {
                     analysisResult.getAnalyzerType()
             );
 
+            log.setProvenance(
+                    savedMemory != null && savedMemory.getProvenance() != null
+                            ? savedMemory.getProvenance().name()
+                            : (memory.getProvenance() != null ? memory.getProvenance().name() : "UNKNOWN")
+            );
+
             securityLogService.save(log);
 
             return savedMemory != null
@@ -280,7 +434,7 @@ public class MemoryService {
         }
 
         // ========================================================
-        // 7. ALLOW LOW-RISK MEMORY
+        // 8. ALLOW LOW-RISK MEMORY
         // ========================================================
 
         memory.setStatus("SAFE");
@@ -327,6 +481,12 @@ public class MemoryService {
                 analysisResult.getAnalyzerType()
         );
 
+        log.setProvenance(
+                savedMemory != null && savedMemory.getProvenance() != null
+                        ? savedMemory.getProvenance().name()
+                        : (memory.getProvenance() != null ? memory.getProvenance().name() : "UNKNOWN")
+        );
+
         securityLogService.save(log);
 
         return savedMemory != null
@@ -339,6 +499,15 @@ public class MemoryService {
     // ============================================================
 
     private SecurityAnalysisResult analyzeRisk(Memory memory) {
+        ProvenanceAnalysisResult provenanceResult =
+                provenanceAnalyzer.analyze(memory);
+
+        return analyzeRisk(memory, provenanceResult);
+    }
+
+    private SecurityAnalysisResult analyzeRisk(
+            Memory memory,
+            ProvenanceAnalysisResult provenanceResult) {
 
         List<java.util.concurrent.Future<SecurityAnalysisResult>>
                 futures = new java.util.ArrayList<>();
@@ -395,7 +564,7 @@ public class MemoryService {
 
                     results.add(
                             createUnavailableResult(
-                                    "AI Semantic analysis timed out"
+                                     "AI Semantic analysis timed out"
                             )
                     );
                 }
@@ -439,6 +608,11 @@ public class MemoryService {
                     );
                 }
             }
+        }
+
+        // Add provenance security analysis signal
+        if (provenanceResult != null) {
+            results.add(provenanceResult);
         }
 
         SecurityAnalysisResult result =

@@ -23,6 +23,10 @@ public class Memory {
     @Column(nullable = false)
     private String memoryType;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private ProvenanceType provenance = ProvenanceType.USER;
+
 
     @Column(nullable = false, length = 64)
     private String integrityHash;
@@ -98,6 +102,19 @@ public class Memory {
 
     public void setMemoryType(String memoryType) {
         this.memoryType = memoryType;
+    }
+
+
+    public ProvenanceType getProvenance() {
+        return provenance != null ? provenance : ProvenanceType.UNKNOWN;
+    }
+
+    public void setProvenance(ProvenanceType provenance) {
+        this.provenance = provenance != null ? provenance : ProvenanceType.UNKNOWN;
+    }
+
+    public void setProvenance(String provenance) {
+        this.provenance = ProvenanceType.fromString(provenance);
     }
 
 
@@ -190,8 +207,20 @@ public class Memory {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
 
-        if(status == null){
+        if (agentId == null) {
+            agentId = 1L;
+        }
+
+        if (memoryType == null) {
+            memoryType = "GENERAL";
+        }
+
+        if (status == null) {
             status = "SAFE";
+        }
+
+        if (provenance == null) {
+            provenance = ProvenanceType.USER;
         }
     }
 

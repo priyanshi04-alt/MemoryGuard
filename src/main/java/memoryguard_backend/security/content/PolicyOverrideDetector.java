@@ -21,8 +21,12 @@ public class PolicyOverrideDetector implements ContentDetector {
             "ignore security policy",
             "override the security rules",
             "override security rules",
+            "do not follow the security policy",
+            "do not follow security policy",
             "do not follow the system policy",
             "do not follow system policy",
+            "bypass the security controls",
+            "bypass security controls",
             "bypass the security rules",
             "disable the security policy"
     };
@@ -38,7 +42,7 @@ public class PolicyOverrideDetector implements ContentDetector {
 
         for (String pattern : PATTERNS) {
             if (lower.contains(pattern)) {
-                signals.add(new ContentSecuritySignal(SIGNAL_TYPE, SEVERITY, DESCRIPTION));
+                signals.add(new ContentSecuritySignal(SIGNAL_TYPE, SEVERITY, DESCRIPTION, getClass().getSimpleName(), pattern));
                 break;
             }
         }

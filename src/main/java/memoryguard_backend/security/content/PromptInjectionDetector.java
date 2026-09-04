@@ -39,7 +39,7 @@ public class PromptInjectionDetector implements ContentDetector {
 
         for (String pattern : PATTERNS) {
             if (lower.contains(pattern)) {
-                signals.add(new ContentSecuritySignal(SIGNAL_TYPE, SEVERITY, DESCRIPTION));
+                signals.add(new ContentSecuritySignal(SIGNAL_TYPE, SEVERITY, DESCRIPTION, getClass().getSimpleName(), pattern));
                 break;
             }
         }

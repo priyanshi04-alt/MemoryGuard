@@ -10,14 +10,22 @@ public class ContentSecuritySignal {
     private String type;
     private String severity;
     private String description;
+    private String detector;
+    private String evidence;
 
     public ContentSecuritySignal() {
     }
 
     public ContentSecuritySignal(String type, String severity, String description) {
+        this(type, severity, description, null, null);
+    }
+
+    public ContentSecuritySignal(String type, String severity, String description, String detector, String evidence) {
         this.type = type;
         this.severity = severity;
         this.description = description;
+        this.detector = detector;
+        this.evidence = evidence;
     }
 
     public String getType() {
@@ -44,6 +52,22 @@ public class ContentSecuritySignal {
         this.description = description;
     }
 
+    public String getDetector() {
+        return detector;
+    }
+
+    public void setDetector(String detector) {
+        this.detector = detector;
+    }
+
+    public String getEvidence() {
+        return evidence;
+    }
+
+    public void setEvidence(String evidence) {
+        this.evidence = evidence;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -51,12 +75,14 @@ public class ContentSecuritySignal {
         ContentSecuritySignal signal = (ContentSecuritySignal) o;
         return Objects.equals(type, signal.type) &&
                Objects.equals(severity, signal.severity) &&
-               Objects.equals(description, signal.description);
+               Objects.equals(description, signal.description) &&
+               Objects.equals(detector, signal.detector) &&
+               Objects.equals(evidence, signal.evidence);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(type, severity, description);
+        return Objects.hash(type, severity, description, detector, evidence);
     }
 
     @Override
@@ -65,6 +91,8 @@ public class ContentSecuritySignal {
                 "type='" + type + '\'' +
                 ", severity='" + severity + '\'' +
                 ", description='" + description + '\'' +
+                ", detector='" + detector + '\'' +
+                ", evidence='" + evidence + '\'' +
                 '}';
     }
 }

@@ -46,9 +46,11 @@ class MemoryContentAnalyzerTests {
 
         boolean hasPromptInjection = result.getSignals().stream()
                 .anyMatch(s -> PromptInjectionDetector.SIGNAL_TYPE.equals(s.getType())
-                        && "HIGH".equals(s.getSeverity()));
+                        && "HIGH".equals(s.getSeverity())
+                        && "PromptInjectionDetector".equals(s.getDetector())
+                        && s.getEvidence() != null);
 
-        assertTrue(hasPromptInjection, "Should detect PROMPT_INJECTION signal with HIGH severity");
+        assertTrue(hasPromptInjection, "Should detect PROMPT_INJECTION signal with HIGH severity and metadata");
     }
 
     @Test
@@ -62,9 +64,11 @@ class MemoryContentAnalyzerTests {
 
         boolean hasSystemPromptExt = result.getSignals().stream()
                 .anyMatch(s -> SystemPromptDetector.SIGNAL_TYPE.equals(s.getType())
-                        && "HIGH".equals(s.getSeverity()));
+                        && "HIGH".equals(s.getSeverity())
+                        && "SystemPromptDetector".equals(s.getDetector())
+                        && s.getEvidence() != null);
 
-        assertTrue(hasSystemPromptExt, "Should detect SYSTEM_PROMPT_EXTRACTION signal with HIGH severity");
+        assertTrue(hasSystemPromptExt, "Should detect SYSTEM_PROMPT_EXTRACTION signal with HIGH severity and metadata");
     }
 
     @Test
@@ -78,9 +82,11 @@ class MemoryContentAnalyzerTests {
 
         boolean hasCredentialExp = result.getSignals().stream()
                 .anyMatch(s -> CredentialDetector.SIGNAL_TYPE.equals(s.getType())
-                        && "HIGH".equals(s.getSeverity()));
+                        && "HIGH".equals(s.getSeverity())
+                        && "CredentialDetector".equals(s.getDetector())
+                        && s.getEvidence() != null);
 
-        assertTrue(hasCredentialExp, "Should detect CREDENTIAL_EXPOSURE signal with HIGH severity");
+        assertTrue(hasCredentialExp, "Should detect CREDENTIAL_EXPOSURE signal with HIGH severity and metadata");
     }
 
     @Test
@@ -94,9 +100,11 @@ class MemoryContentAnalyzerTests {
 
         boolean hasPolicyOverride = result.getSignals().stream()
                 .anyMatch(s -> PolicyOverrideDetector.SIGNAL_TYPE.equals(s.getType())
-                        && "MEDIUM".equals(s.getSeverity()));
+                        && "MEDIUM".equals(s.getSeverity())
+                        && "PolicyOverrideDetector".equals(s.getDetector())
+                        && s.getEvidence() != null);
 
-        assertTrue(hasPolicyOverride, "Should detect POLICY_OVERRIDE_ATTEMPT signal with MEDIUM severity");
+        assertTrue(hasPolicyOverride, "Should detect POLICY_OVERRIDE_ATTEMPT signal with MEDIUM severity and metadata");
     }
 
     @Test

@@ -212,13 +212,55 @@ Tests run: 144, Failures: 0, Errors: 0, Skipped: 0
 BUILD SUCCESS
 ```
 
-### 🛡️ Day 18 — Provenance & Context Analysis Foundation
+### 🛡️ Day 18 — Memory Security Risk Aggregation Foundation
 
-* **Explicit Provenance Representation (`ProvenanceType`)**: Introduced a type-safe `ProvenanceType` enum (`SYSTEM`, `USER`, `AGENT`, `TOOL`, `RETRIEVED`, `UNKNOWN`) replacing raw string origins to anchor memory trust profiles.
-* **Deterministic Provenance Security Analyzer (`ProvenanceAnalyzer`)**: Created dedicated analyzer evaluating initial trust signals (`SYSTEM`: 5, `USER`: 10, `AGENT`: 25, `TOOL`: 45, `RETRIEVED`: 55, `UNKNOWN`: 65) producing structured `ProvenanceAnalysisResult` metadata.
-* **Pipeline Integration & Policy Enforcement**: Integrated provenance analysis directly following Gateway validation. `RETRIEVED` and `UNKNOWN` origins automatically trigger policy `REVIEW`, while `USER`, `SYSTEM`, `AGENT`, and `TOOL` pass with appropriate baseline scores unless malicious content rules elevate them to `BLOCKED`.
-* **Telemetry & Auditability**: Added provenance metadata to `Memory` entity and persisted audit records in `SecurityLog`.
-* **Comprehensive Automated Testing**: Added `ProvenanceAnalyzerTests` and extended `MemoryGatewayFlowTests` to verify all provenance categories, defensive fallback parsing, and pipeline orchestration. All 95 backend tests pass with 0 failures and 0 regressions.
+#### Objective
+Implemented the dedicated **Memory Security Risk Aggregator** layer. Security detectors produce individual pieces of evidence; MemoryGuard requires a transparent, deterministic mechanism to aggregate those signals into a structured overall assessment of memory risk.
+
+#### Architecture
+
+```text
+Memory Content
+      ↓
+Memory Gateway
+      ↓
+Content Analyzer
+      ↓
+Security Signals
+      ↓
+🔥 Risk Aggregator (MemoryRiskAggregator)
+      ↓
+Structured Risk Assessment (MemoryRiskAssessment)
+      ↓
+Future Policy Engine
+```
+
+#### Core Design Principle
+
+> **$\text{Detection} \neq \text{Risk Assessment} \neq \text{Policy Decision}$**
+
+* **Detectors**: Identify specific security evidence/signals.
+* **Risk Aggregator**: Combines evidence into an aggregated risk score ($0\text{--}100$) and risk level.
+* **Policy Engine**: Solely responsible for final trust decisions (`ALLOW`, `REVIEW`, `BLOCK`).
+
+#### Scoring & Classification Model
+
+* **Base Severity Scores**: `LOW` $\rightarrow 20$, `MEDIUM` $\rightarrow 50$, `HIGH` $\rightarrow 80$, `CRITICAL` $\rightarrow 100$.
+* **Multi-Signal Aggregation Strategy**:
+  $$\text{riskScore} = \min\left(100, \text{baseScore}_{\max} + \sum \text{additionalBoosts}\right)$$
+  Primary signal contributes full base score. Additional signals add deterministic boosts (`CRITICAL`/`HIGH` $+10$, `MEDIUM` $+5$, `LOW` $+2$).
+* **Risk Levels**: $0\text{--}24 \rightarrow$ `LOW`, $25\text{--}49 \rightarrow$ `MEDIUM`, $50\text{--}74 \rightarrow$ `HIGH`, $75\text{--}100 \rightarrow$ `CRITICAL`.
+* **Clean Memory**: Empty/null signals return $\text{riskScore}=0, \text{riskLevel}=\text{"LOW"}$.
+
+#### Testing & Validation
+
+Added `MemoryRiskAggregatorTests.java` and `MemoryRiskAggregatorIntegrationTests.java` covering clean memory, single medium/high signals, multiple high/mixed signals, critical signals, end-to-end gateway flow, and strict reflection checks ensuring no policy decision leakages.
+
+```text
+Results:
+Tests run: 153, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS
+```
 
 ### 🛡️ Day 19 — Memory Security Signal Extraction & Risk Feature Foundation
 

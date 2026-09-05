@@ -17,6 +17,9 @@ import memoryguard_backend.security.signals.SecuritySignalExtractor;
 import memoryguard_backend.security.signals.SecuritySignals;
 import memoryguard_backend.security.content.MemoryContentAnalyzer;
 import memoryguard_backend.security.content.ContentAnalysisResult;
+import memoryguard_backend.security.content.ContentSecuritySignal;
+import memoryguard_backend.security.risk.MemoryRiskAggregator;
+import memoryguard_backend.security.risk.MemoryRiskAssessment;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -33,6 +36,7 @@ public class MemoryService {
     private final ProvenanceAnalyzer provenanceAnalyzer;
     private final SecuritySignalExtractor securitySignalExtractor;
     private final MemoryContentAnalyzer memoryContentAnalyzer;
+    private final MemoryRiskAggregator memoryRiskAggregator;
     private final SecurityLogService securityLogService;
     private final PolicyEngine policyEngine;
     private final RiskAggregator riskAggregator;
@@ -46,6 +50,7 @@ public class MemoryService {
             ProvenanceAnalyzer provenanceAnalyzer,
             SecuritySignalExtractor securitySignalExtractor,
             MemoryContentAnalyzer memoryContentAnalyzer,
+            MemoryRiskAggregator memoryRiskAggregator,
             SecurityLogService securityLogService,
             PolicyEngine policyEngine,
             RiskAggregator riskAggregator,
@@ -57,6 +62,7 @@ public class MemoryService {
         this.provenanceAnalyzer = provenanceAnalyzer;
         this.securitySignalExtractor = securitySignalExtractor != null ? securitySignalExtractor : new SecuritySignalExtractor();
         this.memoryContentAnalyzer = memoryContentAnalyzer != null ? memoryContentAnalyzer : new MemoryContentAnalyzer();
+        this.memoryRiskAggregator = memoryRiskAggregator != null ? memoryRiskAggregator : new MemoryRiskAggregator();
         this.securityLogService = securityLogService;
         this.policyEngine = policyEngine;
         this.riskAggregator = riskAggregator;
@@ -69,6 +75,7 @@ public class MemoryService {
             List<SecurityAnalyzer> securityAnalyzers,
             ProvenanceAnalyzer provenanceAnalyzer,
             SecuritySignalExtractor securitySignalExtractor,
+            MemoryContentAnalyzer memoryContentAnalyzer,
             SecurityLogService securityLogService,
             PolicyEngine policyEngine,
             RiskAggregator riskAggregator,
@@ -80,7 +87,8 @@ public class MemoryService {
                 securityAnalyzers,
                 provenanceAnalyzer,
                 securitySignalExtractor,
-                new MemoryContentAnalyzer(),
+                memoryContentAnalyzer,
+                new MemoryRiskAggregator(),
                 securityLogService,
                 policyEngine,
                 riskAggregator,
@@ -206,6 +214,30 @@ public class MemoryService {
             throw new IllegalArgumentException("Memory request cannot be null");
         }
         return memoryContentAnalyzer.analyze(memory.getContent());
+    }
+
+    // ============================================================
+    // DAY 18 - MEMORY SECURITY RISK AGGREGATION
+    // ============================================================
+
+    public MemoryRiskAssessment assessRisk(ContentAnalysisResult contentAnalysisResult) {
+        return memoryRiskAggregator.aggregate(contentAnalysisResult);
+    }
+
+    public MemoryRiskAssessment assessRisk(List<ContentSecuritySignal> signals) {
+        return memoryRiskAggregator.aggregate(signals);
+    }
+
+    public MemoryRiskAssessment assessRisk(String content) {
+        ContentAnalysisResult contentResult = analyzeContent(content);
+        return memoryRiskAggregator.aggregate(contentResult);
+    }
+
+    public MemoryRiskAssessment assessRisk(Memory memory) {
+        if (memory == null) {
+            throw new IllegalArgumentException("Memory request cannot be null");
+        }
+        return assessRisk(memory.getContent());
     }
 
     // ============================================================

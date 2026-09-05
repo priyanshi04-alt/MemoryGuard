@@ -5,6 +5,7 @@ import memoryguard_backend.service.MemoryService;
 
 import memoryguard_backend.security.content.ContentAnalysisResult;
 import memoryguard_backend.security.signals.SecuritySignals;
+import memoryguard_backend.security.risk.MemoryRiskAssessment;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -65,6 +66,25 @@ public class MemoryController {
     public ResponseEntity<ContentAnalysisResult> getContentSignals(@PathVariable Long id) {
         return memoryService.getMemoryById(id)
                 .map(memory -> ResponseEntity.ok(memoryService.analyzeContent(memory.getContent())))
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @PostMapping("/assess-risk")
+    public ResponseEntity<MemoryRiskAssessment> assessRisk(@RequestBody Memory memory) {
+        MemoryRiskAssessment assessment = memoryService.assessRisk(memory);
+        return ResponseEntity.ok(assessment);
+    }
+
+    @PostMapping("/aggregate-risk")
+    public ResponseEntity<MemoryRiskAssessment> aggregateRisk(@RequestBody ContentAnalysisResult contentAnalysisResult) {
+        MemoryRiskAssessment assessment = memoryService.assessRisk(contentAnalysisResult);
+        return ResponseEntity.ok(assessment);
+    }
+
+    @GetMapping("/{id}/risk-assessment")
+    public ResponseEntity<MemoryRiskAssessment> getRiskAssessment(@PathVariable Long id) {
+        return memoryService.getMemoryById(id)
+                .map(memory -> ResponseEntity.ok(memoryService.assessRisk(memory)))
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 

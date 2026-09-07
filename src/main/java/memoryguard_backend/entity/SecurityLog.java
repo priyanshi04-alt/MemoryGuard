@@ -24,7 +24,7 @@ public class SecurityLog {
 
     private LocalDateTime createdAt;
 
-    // Added semantic telemetry metadata
+    // Semantic telemetry metadata
     @Column(length = 50)
     private String analyzerType;
 
@@ -35,6 +35,13 @@ public class SecurityLog {
 
     @Column(length = 30)
     private String provenance;
+
+    // Enhanced audit fields for explainability and traceability
+    @Column(columnDefinition = "TEXT")
+    private String explanation;
+
+    @Column(columnDefinition = "TEXT")
+    private String contributingSignals;
 
 
     public SecurityLog() {
@@ -125,5 +132,21 @@ public class SecurityLog {
 
     public void setProvenance(String provenance) {
         this.provenance = provenance;
+    }
+
+    public String getExplanation() {
+        return explanation;
+    }
+
+    public void setExplanation(String explanation) {
+        this.explanation = explanation;
+    }
+
+    public String getContributingSignals() {
+        return contributingSignals;
+    }
+
+    public void setContributingSignals(String contributingSignals) {
+        this.contributingSignals = contributingSignals;
     }
 }

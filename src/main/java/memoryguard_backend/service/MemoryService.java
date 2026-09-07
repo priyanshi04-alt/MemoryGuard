@@ -3,15 +3,12 @@ package memoryguard_backend.service;
 import memoryguard_backend.entity.Memory;
 import memoryguard_backend.entity.SecurityLog;
 import memoryguard_backend.repository.MemoryRepository;
-import memoryguard_backend.security.HashUtil;
-import memoryguard_backend.security.PolicyDecision;
-import memoryguard_backend.security.PolicyEngine;
-import memoryguard_backend.security.ProvenanceAnalysisResult;
-import memoryguard_backend.security.ProvenanceAnalyzer;
-import memoryguard_backend.security.RiskAggregator;
-import memoryguard_backend.security.SecurityAnalysisResult;
-import memoryguard_backend.security.SecurityAnalyzer;
-import memoryguard_backend.security.SecurityAnalysisProperties;
+import memoryguard_backend.repository.QuarantinedMemoryRepository;
+import memoryguard_backend.repository.DeniedMemoryRepository;
+import memoryguard_backend.security.*;
+import memoryguard_backend.security.context.ContextAnalysisResult;
+import memoryguard_backend.security.context.ContextAnalyzer;
+import memoryguard_backend.security.persistence.PersistenceResult;
 
 import memoryguard_backend.security.signals.SecuritySignalExtractor;
 import memoryguard_backend.security.signals.SecuritySignals;
@@ -27,6 +24,7 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @Service
 public class MemoryService {
@@ -34,12 +32,14 @@ public class MemoryService {
     private final MemoryRepository memoryRepository;
     private final List<SecurityAnalyzer> securityAnalyzers;
     private final ProvenanceAnalyzer provenanceAnalyzer;
+    private final ContextAnalyzer contextAnalyzer;
     private final SecuritySignalExtractor securitySignalExtractor;
     private final MemoryContentAnalyzer memoryContentAnalyzer;
     private final MemoryRiskAggregator memoryRiskAggregator;
     private final SecurityLogService securityLogService;
     private final PolicyEngine policyEngine;
     private final RiskAggregator riskAggregator;
+    private final MemoryPersistenceService memoryPersistenceService;
     private final ExecutorService securityAnalysisExecutor;
     private final SecurityAnalysisProperties securityAnalysisProperties;
 
@@ -48,6 +48,38 @@ public class MemoryService {
             MemoryRepository memoryRepository,
             List<SecurityAnalyzer> securityAnalyzers,
             ProvenanceAnalyzer provenanceAnalyzer,
+            ContextAnalyzer contextAnalyzer,
+            SecuritySignalExtractor securitySignalExtractor,
+            MemoryContentAnalyzer memoryContentAnalyzer,
+            MemoryRiskAggregator memoryRiskAggregator,
+            SecurityLogService securityLogService,
+            PolicyEngine policyEngine,
+            RiskAggregator riskAggregator,
+            MemoryPersistenceService memoryPersistenceService,
+            ExecutorService securityAnalysisExecutor,
+            SecurityAnalysisProperties securityAnalysisProperties) {
+
+        this.memoryRepository = memoryRepository;
+        this.securityAnalyzers = securityAnalyzers != null ? securityAnalyzers : List.of();
+        this.provenanceAnalyzer = provenanceAnalyzer != null ? provenanceAnalyzer : new ProvenanceAnalyzer();
+        this.contextAnalyzer = contextAnalyzer != null ? contextAnalyzer : new ContextAnalyzer();
+        this.securitySignalExtractor = securitySignalExtractor != null ? securitySignalExtractor : new SecuritySignalExtractor();
+        this.memoryContentAnalyzer = memoryContentAnalyzer != null ? memoryContentAnalyzer : new MemoryContentAnalyzer();
+        this.memoryRiskAggregator = memoryRiskAggregator != null ? memoryRiskAggregator : new MemoryRiskAggregator();
+        this.securityLogService = securityLogService;
+        this.policyEngine = policyEngine != null ? policyEngine : new PolicyEngine();
+        this.riskAggregator = riskAggregator != null ? riskAggregator : new RiskAggregator();
+        this.memoryPersistenceService = memoryPersistenceService != null ? memoryPersistenceService :
+                new MemoryPersistenceService(memoryRepository, null, null, securityLogService);
+        this.securityAnalysisExecutor = securityAnalysisExecutor != null ? securityAnalysisExecutor : Executors.newFixedThreadPool(2);
+        this.securityAnalysisProperties = securityAnalysisProperties != null ? securityAnalysisProperties : new SecurityAnalysisProperties();
+    }
+
+    public MemoryService(
+            MemoryRepository memoryRepository,
+            List<SecurityAnalyzer> securityAnalyzers,
+            ProvenanceAnalyzer provenanceAnalyzer,
+            ContextAnalyzer contextAnalyzer,
             SecuritySignalExtractor securitySignalExtractor,
             MemoryContentAnalyzer memoryContentAnalyzer,
             MemoryRiskAggregator memoryRiskAggregator,
@@ -57,17 +89,21 @@ public class MemoryService {
             ExecutorService securityAnalysisExecutor,
             SecurityAnalysisProperties securityAnalysisProperties) {
 
-        this.memoryRepository = memoryRepository;
-        this.securityAnalyzers = securityAnalyzers;
-        this.provenanceAnalyzer = provenanceAnalyzer;
-        this.securitySignalExtractor = securitySignalExtractor != null ? securitySignalExtractor : new SecuritySignalExtractor();
-        this.memoryContentAnalyzer = memoryContentAnalyzer != null ? memoryContentAnalyzer : new MemoryContentAnalyzer();
-        this.memoryRiskAggregator = memoryRiskAggregator != null ? memoryRiskAggregator : new MemoryRiskAggregator();
-        this.securityLogService = securityLogService;
-        this.policyEngine = policyEngine;
-        this.riskAggregator = riskAggregator;
-        this.securityAnalysisExecutor = securityAnalysisExecutor;
-        this.securityAnalysisProperties = securityAnalysisProperties;
+        this(
+                memoryRepository,
+                securityAnalyzers,
+                provenanceAnalyzer,
+                contextAnalyzer,
+                securitySignalExtractor,
+                memoryContentAnalyzer,
+                memoryRiskAggregator,
+                securityLogService,
+                policyEngine,
+                riskAggregator,
+                null,
+                securityAnalysisExecutor,
+                securityAnalysisProperties
+        );
     }
 
     public MemoryService(
@@ -86,36 +122,14 @@ public class MemoryService {
                 memoryRepository,
                 securityAnalyzers,
                 provenanceAnalyzer,
+                new ContextAnalyzer(),
                 securitySignalExtractor,
                 memoryContentAnalyzer,
                 new MemoryRiskAggregator(),
                 securityLogService,
                 policyEngine,
                 riskAggregator,
-                securityAnalysisExecutor,
-                securityAnalysisProperties
-        );
-    }
-
-    public MemoryService(
-            MemoryRepository memoryRepository,
-            List<SecurityAnalyzer> securityAnalyzers,
-            ProvenanceAnalyzer provenanceAnalyzer,
-            SecurityLogService securityLogService,
-            PolicyEngine policyEngine,
-            RiskAggregator riskAggregator,
-            ExecutorService securityAnalysisExecutor,
-            SecurityAnalysisProperties securityAnalysisProperties) {
-
-        this(
-                memoryRepository,
-                securityAnalyzers,
-                provenanceAnalyzer,
-                new SecuritySignalExtractor(),
-                new MemoryContentAnalyzer(),
-                securityLogService,
-                policyEngine,
-                riskAggregator,
+                null,
                 securityAnalysisExecutor,
                 securityAnalysisProperties
         );
@@ -134,18 +148,21 @@ public class MemoryService {
                 memoryRepository,
                 securityAnalyzers,
                 new ProvenanceAnalyzer(),
+                new ContextAnalyzer(),
                 new SecuritySignalExtractor(),
                 new MemoryContentAnalyzer(),
+                new MemoryRiskAggregator(),
                 securityLogService,
                 policyEngine,
                 riskAggregator,
+                null,
                 securityAnalysisExecutor,
                 securityAnalysisProperties
         );
     }
 
     // ============================================================
-    // GET ALL MEMORIES
+    // GET ALL MEMORIES (ACTIVE / SAFE ONLY)
     // ============================================================
 
     public List<Memory> getAllMemories() {
@@ -175,8 +192,7 @@ public class MemoryService {
 
     public Optional<Memory> getMemoryById(Long id) {
 
-        Optional<Memory> memory =
-                memoryRepository.findById(id);
+        Optional<Memory> memory = memoryRepository.findById(id);
 
         if (memory.isPresent()) {
             analyzeRisk(memory.get());
@@ -191,18 +207,13 @@ public class MemoryService {
 
     public boolean verifyIntegrity(Memory memory) {
 
-        String calculatedHash =
-                HashUtil.generateHash(
-                        memory.getContent()
-                );
+        String calculatedHash = HashUtil.generateHash(memory.getContent());
 
-        return calculatedHash.equals(
-                memory.getIntegrityHash()
-        );
+        return calculatedHash.equals(memory.getIntegrityHash());
     }
 
     // ============================================================
-    // DAY 17 - MEMORY CONTENT SECURITY ANALYSIS
+    // CONTENT & RISK ANALYSIS HELPERS
     // ============================================================
 
     public ContentAnalysisResult analyzeContent(String content) {
@@ -215,10 +226,6 @@ public class MemoryService {
         }
         return memoryContentAnalyzer.analyze(memory.getContent());
     }
-
-    // ============================================================
-    // DAY 18 - MEMORY SECURITY RISK AGGREGATION
-    // ============================================================
 
     public MemoryRiskAssessment assessRisk(ContentAnalysisResult contentAnalysisResult) {
         return memoryRiskAggregator.aggregate(contentAnalysisResult);
@@ -240,10 +247,6 @@ public class MemoryService {
         return assessRisk(memory.getContent());
     }
 
-    // ============================================================
-    // DAY 19 - SECURITY SIGNAL EXTRACTION
-    // ============================================================
-
     public SecuritySignals extractSecuritySignals(Memory memory) {
         if (memory == null) {
             throw new IllegalArgumentException("Memory request cannot be null");
@@ -263,435 +266,185 @@ public class MemoryService {
     private void validateIncomingMemory(Memory memory) {
 
         if (memory == null) {
-            throw new IllegalArgumentException(
-                    "Memory request cannot be null"
-            );
+            throw new IllegalArgumentException("Memory request cannot be null");
         }
 
-        if (memory.getContent() == null ||
-                memory.getContent().trim().isEmpty()) {
-
-            throw new IllegalArgumentException(
-                    "Memory content cannot be empty"
-            );
+        if (memory.getContent() == null || memory.getContent().trim().isEmpty()) {
+            throw new IllegalArgumentException("Memory content cannot be empty");
         }
 
         if (memory.getContent().length() > 10000) {
-
-            throw new IllegalArgumentException(
-                    "Memory content exceeds maximum allowed size"
-            );
+            throw new IllegalArgumentException("Memory content exceeds maximum allowed size");
         }
     }
 
     // ============================================================
-    // CREATE MEMORY
+    // CREATE MEMORY PIPELINE (DAY 22 PERSISTENCE ENFORCEMENT)
     // ============================================================
 
     public Memory createMemory(Memory memory) {
 
-        // ========================================================
-        // 0. MEMORY GATEWAY VALIDATION
-        // ========================================================
-
+        // 0. Gateway Validation
         validateIncomingMemory(memory);
 
-        // ========================================================
-        // 0.5. MEMORY CONTENT SECURITY ANALYSIS (DAY 17)
-        // ========================================================
-
-        ContentAnalysisResult contentAnalysisResult =
-                memoryContentAnalyzer.analyze(memory.getContent());
-
-        // ========================================================
-        // 1. GENERATE CORRELATION ID
-        // ========================================================
-
-        String correlationId =
-                java.util.UUID.randomUUID().toString();
-
+        // 1. Identifiers & Integrity Hashing
+        String correlationId = java.util.UUID.randomUUID().toString();
         memory.setCorrelationId(correlationId);
-
-        // ========================================================
-        // 2. GENERATE INTEGRITY HASH
-        // ========================================================
-
-        String hash =
-                HashUtil.generateHash(
-                        memory.getContent()
-                );
-
+        String hash = HashUtil.generateHash(memory.getContent());
         memory.setIntegrityHash(hash);
 
-        // ========================================================
-        // 3. PROVENANCE ANALYSIS
-        // ========================================================
+        // 2. Provenance Analysis
+        ProvenanceAnalysisResult provenanceResult = provenanceAnalyzer.analyze(memory);
 
-        ProvenanceAnalysisResult provenanceResult =
-                provenanceAnalyzer.analyze(memory);
+        // 3. Context Analysis
+        ContextAnalysisResult contextResult = contextAnalyzer.analyze(memory);
 
-        // ========================================================
-        // 3.5. SECURITY SIGNAL EXTRACTION (DAY 19)
-        // ========================================================
+        // 4. Security Analyzers (Parallel execution across detectors)
+        AggregatedRiskAssessment riskAssessment = analyzeRiskAssessment(memory, provenanceResult, contextResult);
 
-        SecuritySignals securitySignals =
-                securitySignalExtractor.extract(memory);
+        // Populate Memory risk attributes
+        memory.setRiskLevel(riskAssessment.getOverallRiskLevel());
+        memory.setRiskScore(riskAssessment.getOverallRiskScore());
+        memory.setRiskCategory(riskAssessment.getPrimaryCategory());
 
-        // ========================================================
-        // 4. SECURITY ANALYSIS
-        // ========================================================
+        // 5. Policy Engine Evaluation
+        PolicyDecisionResult policyResult = policyEngine.evaluate(riskAssessment);
+        memory.setRiskReason(policyResult.getExplanation());
 
-        SecurityAnalysisResult analysisResult =
-                analyzeRisk(memory, provenanceResult);
+        // 6. Persistence Enforcement Service (ALLOW -> PERMITTED, REVIEW -> QUARANTINED, BLOCK -> DENIED)
+        PersistenceResult persistenceResult = memoryPersistenceService.enforcePersistence(memory, policyResult, riskAssessment);
 
-        // ========================================================
-        // 5. POLICY DECISION
-        // ========================================================
-
-        PolicyDecision decision =
-                policyEngine.decide(
-                        memory.getRiskScore()
-                );
-
-        // ========================================================
-        // 6. BLOCK HIGH-RISK MEMORY
-        // ========================================================
-
-        if (decision == PolicyDecision.BLOCK) {
-
-            memory.setStatus("BLOCKED");
-
-            SecurityLog log =
-                    new SecurityLog();
-
-            // Blocked memory is not persisted,
-            // therefore it has no database memory ID.
-
-            log.setMemoryId(null);
-            log.setCorrelationId(correlationId);
-
-            log.setRiskScore(
-                    memory.getRiskScore()
-            );
-
-            log.setThreatType(
-                    memory.getRiskCategory()
-            );
-
-            log.setActionTaken("BLOCKED");
-            log.setRiskLevel(
-                    memory.getRiskLevel()
-            );
-
-            log.setConfidence(
-                    analysisResult.getConfidence()
-            );
-
-            log.setAnalyzerType(
-                    analysisResult.getAnalyzerType()
-            );
-
-            log.setProvenance(
-                    memory.getProvenance() != null
-                            ? memory.getProvenance().name()
-                            : "UNKNOWN"
-            );
-
-            securityLogService.save(log);
-
-            return memory;
-        }
-
-        // ========================================================
-        // 7. REVIEW MEDIUM-RISK MEMORY
-        // ========================================================
-
-        if (decision == PolicyDecision.REVIEW) {
-
+        if (persistenceResult.isPermitted()) {
+            memory.setStatus("SAFE");
+            if (persistenceResult.getMemoryId() != null) {
+                memory.setId(persistenceResult.getMemoryId());
+            }
+        } else if (persistenceResult.isQuarantined()) {
             memory.setStatus("REVIEW");
-
-            Memory savedMemory =
-                    memoryRepository.save(memory);
-
-            Long memoryId =
-                    (savedMemory != null)
-                            ? savedMemory.getId()
-                            : null;
-
-            SecurityLog log =
-                    new SecurityLog();
-
-            log.setMemoryId(memoryId);
-            log.setCorrelationId(correlationId);
-
-            log.setRiskScore(
-                    savedMemory != null
-                            ? savedMemory.getRiskScore()
-                            : memory.getRiskScore()
-            );
-
-            log.setThreatType(
-                    savedMemory != null
-                            ? savedMemory.getRiskCategory()
-                            : memory.getRiskCategory()
-            );
-
-            log.setActionTaken("REVIEW");
-
-            log.setRiskLevel(
-                    savedMemory != null
-                            ? savedMemory.getRiskLevel()
-                            : memory.getRiskLevel()
-            );
-
-            log.setConfidence(
-                    analysisResult.getConfidence()
-            );
-
-            log.setAnalyzerType(
-                    analysisResult.getAnalyzerType()
-            );
-
-            log.setProvenance(
-                    savedMemory != null && savedMemory.getProvenance() != null
-                            ? savedMemory.getProvenance().name()
-                            : (memory.getProvenance() != null ? memory.getProvenance().name() : "UNKNOWN")
-            );
-
-            securityLogService.save(log);
-
-            return savedMemory != null
-                    ? savedMemory
-                    : memory;
+            if (persistenceResult.getQuarantineId() != null) {
+                memory.setId(persistenceResult.getQuarantineId());
+            }
+        } else {
+            memory.setStatus("BLOCKED");
+            memory.setId(null);
         }
 
-        // ========================================================
-        // 8. ALLOW LOW-RISK MEMORY
-        // ========================================================
-
-        memory.setStatus("SAFE");
-
-        Memory savedMemory =
-                memoryRepository.save(memory);
-
-        Long memoryId =
-                (savedMemory != null)
-                        ? savedMemory.getId()
-                        : null;
-
-        SecurityLog log =
-                new SecurityLog();
-
-        log.setMemoryId(memoryId);
-        log.setCorrelationId(correlationId);
-
-        log.setRiskScore(
-                savedMemory != null
-                        ? savedMemory.getRiskScore()
-                        : memory.getRiskScore()
-        );
-
-        log.setThreatType(
-                savedMemory != null
-                        ? savedMemory.getRiskCategory()
-                        : memory.getRiskCategory()
-        );
-
-        log.setActionTaken("ALLOWED");
-
-        log.setRiskLevel(
-                savedMemory != null
-                        ? savedMemory.getRiskLevel()
-                        : memory.getRiskLevel()
-        );
-
-        log.setConfidence(
-                analysisResult.getConfidence()
-        );
-
-        log.setAnalyzerType(
-                analysisResult.getAnalyzerType()
-        );
-
-        log.setProvenance(
-                savedMemory != null && savedMemory.getProvenance() != null
-                        ? savedMemory.getProvenance().name()
-                        : (memory.getProvenance() != null ? memory.getProvenance().name() : "UNKNOWN")
-        );
-
-        securityLogService.save(log);
-
-        return savedMemory != null
-                ? savedMemory
-                : memory;
+        return memory;
     }
 
     // ============================================================
-    // SECURITY ANALYSIS
+    // RISK ASSESSMENT EXECUTION
     // ============================================================
 
     private SecurityAnalysisResult analyzeRisk(Memory memory) {
-        ProvenanceAnalysisResult provenanceResult =
-                provenanceAnalyzer.analyze(memory);
+        ProvenanceAnalysisResult provenanceResult = provenanceAnalyzer.analyze(memory);
+        ContextAnalysisResult contextResult = contextAnalyzer.analyze(memory);
+        AggregatedRiskAssessment assessment = analyzeRiskAssessment(memory, provenanceResult, contextResult);
 
-        return analyzeRisk(memory, provenanceResult);
+        memory.setRiskLevel(assessment.getOverallRiskLevel());
+        memory.setRiskScore(assessment.getOverallRiskScore());
+        memory.setRiskCategory(assessment.getPrimaryCategory());
+        memory.setRiskReason(assessment.getPrimaryReason());
+
+        return new SecurityAnalysisResult(
+                assessment.getOverallRiskLevel(),
+                assessment.getOverallRiskScore(),
+                assessment.getPrimaryCategory(),
+                assessment.getPrimaryReason(),
+                assessment.getConfidence(),
+                "AGGREGATED"
+        );
     }
 
-    private SecurityAnalysisResult analyzeRisk(
+    private AggregatedRiskAssessment analyzeRiskAssessment(
             Memory memory,
-            ProvenanceAnalysisResult provenanceResult) {
+            ProvenanceAnalysisResult provenanceResult,
+            ContextAnalysisResult contextResult) {
 
-        List<java.util.concurrent.Future<SecurityAnalysisResult>>
-                futures = new java.util.ArrayList<>();
+        List<java.util.concurrent.Future<SecurityAnalysisResult>> futures = new java.util.ArrayList<>();
 
         for (SecurityAnalyzer analyzer : securityAnalyzers) {
-
             futures.add(
                     securityAnalysisExecutor.submit(
-                            () -> analyzer.analyze(
-                                    memory.getContent()
-                            )
+                            () -> analyzer.analyze(memory.getContent())
                     )
             );
         }
 
-        List<SecurityAnalysisResult> results =
-                new java.util.ArrayList<>();
+        List<SecurityAnalysisResult> results = new java.util.ArrayList<>();
 
-        for (int i = 0;
-             i < securityAnalyzers.size();
-             i++) {
-
-            SecurityAnalyzer analyzer =
-                    securityAnalyzers.get(i);
-
-            java.util.concurrent.Future<SecurityAnalysisResult>
-                    future = futures.get(i);
+        for (int i = 0; i < securityAnalyzers.size(); i++) {
+            SecurityAnalyzer analyzer = securityAnalyzers.get(i);
+            java.util.concurrent.Future<SecurityAnalysisResult> future = futures.get(i);
 
             try {
-
-                SecurityAnalysisResult res =
-                        future.get(
-                                securityAnalysisProperties
-                                        .getTimeoutMs(),
-                                java.util.concurrent.TimeUnit.MILLISECONDS
-                        );
-
+                SecurityAnalysisResult res = future.get(
+                        securityAnalysisProperties.getTimeoutMs(),
+                        java.util.concurrent.TimeUnit.MILLISECONDS
+                );
                 results.add(res);
-
-            } catch (
-                    java.util.concurrent.TimeoutException e) {
-
+            } catch (java.util.concurrent.TimeoutException e) {
                 future.cancel(true);
-
-                if (!"SEMANTIC".equals(
-                        analyzer.getAnalyzerType())) {
-
-                    throw new RuntimeException(
-                            "Deterministic security analysis timed out",
-                            e
-                    );
-
+                if (!"SEMANTIC".equals(analyzer.getAnalyzerType())) {
+                    throw new RuntimeException("Deterministic security analysis timed out", e);
                 } else {
-
-                    results.add(
-                            createUnavailableResult(
-                                     "AI Semantic analysis timed out"
-                            )
-                    );
+                    results.add(createUnavailableResult("AI Semantic analysis timed out"));
                 }
-
-            } catch (
-                    java.util.concurrent.ExecutionException e) {
-
-                if (!"SEMANTIC".equals(
-                        analyzer.getAnalyzerType())) {
-
-                    throw new RuntimeException(
-                            "Deterministic security analysis failed",
-                            e.getCause()
-                    );
-
-                } else {
-
-                    results.add(
-                            createUnavailableResult(
-                                    "AI Semantic analysis failed"
-                            )
-                    );
-                }
-
             } catch (Exception e) {
-
-                if (!"SEMANTIC".equals(
-                        analyzer.getAnalyzerType())) {
-
-                    throw new RuntimeException(
-                            "Deterministic security analysis interrupted or failed",
-                            e
-                    );
-
+                if (!"SEMANTIC".equals(analyzer.getAnalyzerType())) {
+                    throw new RuntimeException("Security analysis failed", e);
                 } else {
-
-                    results.add(
-                            createUnavailableResult(
-                                    "AI Semantic analysis failed"
-                            )
-                    );
+                    results.add(createUnavailableResult("AI Semantic analysis failed"));
                 }
             }
         }
 
-        // Add provenance security analysis signal
+        if (memoryContentAnalyzer != null && memory.getContent() != null) {
+            ContentAnalysisResult contentResult = memoryContentAnalyzer.analyze(memory.getContent());
+            if (contentResult != null && contentResult.getSignals() != null) {
+                for (ContentSecuritySignal sig : contentResult.getSignals()) {
+                    int score = mapSeverityToScore(sig.getSeverity());
+                    results.add(new SecurityAnalysisResult(
+                            mapScoreToLevel(score),
+                            score,
+                            sig.getType(),
+                            sig.getDescription() != null ? sig.getDescription() : "Content threat signal detected",
+                            0.9,
+                            "RULE"
+                    ));
+                }
+            }
+        }
+
         if (provenanceResult != null) {
             results.add(provenanceResult);
         }
 
-        SecurityAnalysisResult result =
-                riskAggregator.aggregate(results);
+        if (contextResult != null && contextResult.getRiskScore() > 0) {
+            results.add(contextAnalyzer.toSecurityAnalysisResult(contextResult));
+        }
 
-        // ========================================================
-        // RISK LEVEL
-        // ========================================================
-
-        memory.setRiskLevel(
-                result.getRiskLevel()
-        );
-
-        // ========================================================
-        // RISK SCORE
-        // ========================================================
-
-        memory.setRiskScore(
-                result.getRiskScore()
-        );
-
-        // ========================================================
-        // THREAT CATEGORY
-        // ========================================================
-
-        memory.setRiskCategory(
-                result.getCategory()
-        );
-
-        // ========================================================
-        // EXPLANATION
-        // ========================================================
-
-        memory.setRiskReason(
-                result.getReason()
-        );
-
-        return result;
+        return riskAggregator.aggregateAssessment(results);
     }
 
-    // ============================================================
-    // SEMANTIC ANALYSIS FALLBACK
-    // ============================================================
+    private int mapSeverityToScore(String severity) {
+        if (severity == null) return 50;
+        switch (severity.toUpperCase().trim()) {
+            case "CRITICAL": return 100;
+            case "HIGH": return 85;
+            case "MEDIUM": return 55;
+            case "LOW": return 20;
+            default: return 50;
+        }
+    }
 
-    private SecurityAnalysisResult createUnavailableResult(
-            String reason) {
+    private String mapScoreToLevel(int score) {
+        if (score >= 80) return "HIGH";
+        if (score >= 50) return "MEDIUM";
+        return "LOW";
+    }
 
+    private SecurityAnalysisResult createUnavailableResult(String reason) {
         return new SecurityAnalysisResult(
                 "LOW",
                 0,
@@ -706,17 +459,11 @@ public class MemoryService {
     // MEMORY STATISTICS
     // ============================================================
 
-    public memoryguard_backend.controller.MemoryController.MemoryStats
-    getMemoryStats() {
+    public memoryguard_backend.controller.MemoryController.MemoryStats getMemoryStats() {
 
-        long totalTrusted =
-                memoryRepository.countByStatus("SAFE");
-
-        long needsReview =
-                memoryRepository.countByStatus("REVIEW");
-
-        long blockedAttempts =
-                securityLogService.countByAction("BLOCKED");
+        long totalTrusted = memoryRepository.countByStatus("SAFE");
+        long needsReview = memoryRepository.countByStatus("REVIEW");
+        long blockedAttempts = securityLogService.countByAction("BLOCKED") + securityLogService.countByAction("MEMORY_DENIED");
 
         return new memoryguard_backend.controller.MemoryController.MemoryStats(
                 totalTrusted,

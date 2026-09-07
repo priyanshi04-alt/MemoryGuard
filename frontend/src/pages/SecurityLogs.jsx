@@ -33,10 +33,10 @@ function SecurityLogs() {
       <div className="analysis-header">
         <p className="eyebrow">SECURITY MONITORING</p>
 
-        <h1>Security Logs</h1>
+        <h1>Security Audit Trail</h1>
 
         <p className="subtitle">
-          Review security events detected by the MemoryGuard pipeline.
+          Review traceable security decisions and evidence recorded by MemoryGuard.
         </p>
       </div>
 
@@ -44,10 +44,10 @@ function SecurityLogs() {
 
         <div className="panel-header">
           <div>
-            <h2>Security Events</h2>
+            <h2>Audit Log Events</h2>
 
             <p>
-              Recorded actions taken against potentially unsafe memories.
+              Recorded actions and policy explanations for evaluated memories.
             </p>
           </div>
 
@@ -83,13 +83,11 @@ function SecurityLogs() {
                 <tr>
                   <th>ID</th>
                   <th>Memory ID</th>
-                  <th>Source</th>
+                  <th>Provenance</th>
                   <th>Threat Type</th>
                   <th>Risk Score</th>
-                  <th>Risk Level</th>
-                  <th>Confidence</th>
                   <th>Action</th>
-                  <th>Correlation ID</th>
+                  <th>Explanation / Policy Rationale</th>
                   <th>Created At</th>
                 </tr>
               </thead>
@@ -108,7 +106,7 @@ function SecurityLogs() {
                     </td>
 
                     <td style={{fontWeight: '500'}}>
-                      {log.analyzerType || '—'}
+                      {log.provenance || 'UNKNOWN'}
                     </td>
 
                     <td>
@@ -132,16 +130,6 @@ function SecurityLogs() {
                     </td>
 
                     <td>
-                      <span className={`threat-badge ${log.riskLevel ? log.riskLevel.toLowerCase() : ''}`}>
-                        {log.riskLevel || '—'}
-                      </span>
-                    </td>
-
-                    <td>
-                      {log.confidence != null ? `${(log.confidence * 100).toFixed(0)}%` : '—'}
-                    </td>
-
-                    <td>
                       <span
                         className={`log-action ${
                           log.actionTaken === 'BLOCKED'
@@ -155,8 +143,13 @@ function SecurityLogs() {
                       </span>
                     </td>
 
-                    <td className="log-correlation" style={{fontFamily: 'monospace', fontSize: '0.85em'}}>
-                      {log.correlationId || '—'}
+                    <td style={{maxWidth: '320px', fontSize: '0.9em', color: '#cbd5e1'}}>
+                      <div>{log.explanation || '—'}</div>
+                      {log.contributingSignals && (
+                        <div style={{fontSize: '0.8em', color: '#94a3b8', marginTop: '4px'}}>
+                          <strong>Signals:</strong> {log.contributingSignals}
+                        </div>
+                      )}
                     </td>
 
                     <td className="log-date">

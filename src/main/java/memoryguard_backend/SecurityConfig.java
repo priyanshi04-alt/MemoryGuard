@@ -28,23 +28,9 @@ public class SecurityConfig {
                 .requestMatchers(
                     "/api/health",
                     "/api/security-logs",
+                    "/api/memories/**",
+                    "/api/quarantine/**",
                     "/error"
-                ).permitAll()
-
-                .requestMatchers(
-                    HttpMethod.GET,
-                    "/api/memories",
-                    "/api/memories/stats"
-                ).permitAll()
-
-                .requestMatchers(
-                    HttpMethod.GET,
-                    "/api/memories/{id}/verify"
-                ).permitAll()
-
-                .requestMatchers(
-                    HttpMethod.POST,
-                    "/api/memories"
                 ).permitAll()
 
                 .anyRequest().authenticated()

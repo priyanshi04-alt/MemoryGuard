@@ -38,6 +38,7 @@ public class BaselineSemanticAnalyzer implements SemanticSecurityAnalyzer {
         }
 
         String normalized = content.toLowerCase(Locale.ROOT).trim();
+        String deobfuscated = normalized.replaceAll("(?<=\\b[a-z])\\s+(?=[a-z]\\b)", "");
         List<SemanticSecuritySignal> signals = new ArrayList<>();
 
         // 1. Check for Benign Security Education / Technical Discussion Context
@@ -70,7 +71,7 @@ public class BaselineSemanticAnalyzer implements SemanticSecurityAnalyzer {
         }
 
         // 2. Evaluate Semantic Security Signals
-        evaluatePromptInjection(normalized, content, signals);
+        evaluatePromptInjection(normalized, deobfuscated, content, signals);
         evaluateInstructionOverride(normalized, content, signals);
         evaluatePrivilegeEscalation(normalized, content, signals);
         evaluateToolManipulation(normalized, content, signals);
@@ -157,7 +158,9 @@ public class BaselineSemanticAnalyzer implements SemanticSecurityAnalyzer {
                 "educational overview", "user asked about", "best practice",
                 "best practices", "how to prevent", "security guide",
                 "article explaining", "understanding prompt injection",
-                "documentation regarding", "overview of security"
+                "documentation regarding", "overview of security",
+                "security teams should", "security recommendations",
+                "overview of", "guide to", "analysis of"
         );
     }
 
@@ -167,16 +170,19 @@ public class BaselineSemanticAnalyzer implements SemanticSecurityAnalyzer {
                 "ignore previous instructions and",
                 "override system prompt and",
                 "reveal api key and",
-                "dump environment variables"
+                "dump environment variables and",
+                "send api key to"
         );
     }
 
-    private void evaluatePromptInjection(String text, String originalContent, List<SemanticSecuritySignal> signals) {
+    private void evaluatePromptInjection(String text, String deobfuscated, String originalContent, List<SemanticSecuritySignal> signals) {
         if (containsAny(text,
                 "ignore previous instructions", "ignore all previous instructions",
                 "disregard previous instructions", "disregard all previous instructions",
                 "forget previous instructions", "override system instructions",
-                "replace system prompt", "jailbreak mode", "developer mode", "dan mode")) {
+                "replace system prompt", "jailbreak mode", "developer mode", "dan mode")
+            || containsAny(deobfuscated,
+                "ignorepreviousinstructions", "ignoreallpreviousinstructions", "disregardpreviousinstructions")) {
 
             signals.add(new SemanticSecuritySignal(
                     SemanticSignalType.PROMPT_INJECTION,
@@ -193,7 +199,7 @@ public class BaselineSemanticAnalyzer implements SemanticSecurityAnalyzer {
         if (containsAny(text,
                 "always follow this instruction instead", "from now on you must follow",
                 "you must obey this instruction", "replace system instructions with",
-                "disregard system rules", "override all previous rules")) {
+                "disregard system rules", "disregard system safety rules", "disregard safety rules", "override all previous rules")) {
 
             signals.add(new SemanticSecuritySignal(
                     SemanticSignalType.INSTRUCTION_OVERRIDE,
@@ -244,7 +250,7 @@ public class BaselineSemanticAnalyzer implements SemanticSecurityAnalyzer {
         if (containsAny(text,
                 "send api key to", "reveal password to", "post credentials to",
                 "exfiltrate database secret", "dump environment variables", "upload private key",
-                "reveal the stored api key")) {
+                "reveal stored api key", "reveal the stored api key", "send password")) {
 
             signals.add(new SemanticSecuritySignal(
                     SemanticSignalType.SECRET_EXFILTRATION,
@@ -310,7 +316,7 @@ public class BaselineSemanticAnalyzer implements SemanticSecurityAnalyzer {
     private void evaluateSuspiciousInstructionAndAuditSuppression(String text, String originalContent, List<SemanticSecuritySignal> signals) {
         if (containsAny(text,
                 "do not log this action", "hide this operation from audit",
-                "bypass security logging", "suppress security warnings", "disable audit log")) {
+                "bypass security logging", "suspend security logging", "suspend audit logging", "suppress security warnings", "disable audit log")) {
 
             signals.add(new SemanticSecuritySignal(
                     SemanticSignalType.SUSPICIOUS_INSTRUCTION,

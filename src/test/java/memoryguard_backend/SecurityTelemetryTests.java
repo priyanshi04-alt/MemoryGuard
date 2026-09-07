@@ -1,10 +1,17 @@
 package memoryguard_backend;
 
 import memoryguard_backend.entity.Memory;
+import memoryguard_backend.entity.QuarantinedMemory;
 import memoryguard_backend.entity.SecurityLog;
 import memoryguard_backend.repository.MemoryRepository;
+import memoryguard_backend.repository.QuarantinedMemoryRepository;
 import memoryguard_backend.repository.SecurityLogRepository;
 import memoryguard_backend.security.*;
+import memoryguard_backend.security.context.ContextAnalyzer;
+import memoryguard_backend.security.content.MemoryContentAnalyzer;
+import memoryguard_backend.security.risk.MemoryRiskAggregator;
+import memoryguard_backend.security.signals.SecuritySignalExtractor;
+import memoryguard_backend.service.MemoryPersistenceService;
 import memoryguard_backend.service.MemoryService;
 import memoryguard_backend.service.SecurityLogService;
 import org.junit.jupiter.api.AfterEach;
@@ -23,6 +30,7 @@ class SecurityTelemetryTests {
     private ExecutorService testExecutor;
     private SecurityAnalysisProperties testProperties;
     private MemoryRepository memoryRepository;
+    private QuarantinedMemoryRepository quarantinedMemoryRepository;
     private SecurityLogRepository securityLogRepository;
     private SecurityLogService securityLogService;
     private PolicyEngine policyEngine;
@@ -36,6 +44,7 @@ class SecurityTelemetryTests {
         testExecutor = Executors.newFixedThreadPool(2);
 
         memoryRepository = mock(MemoryRepository.class);
+        quarantinedMemoryRepository = mock(QuarantinedMemoryRepository.class);
         securityLogRepository = mock(SecurityLogRepository.class);
         securityLogService = new SecurityLogService(securityLogRepository);
         policyEngine = new PolicyEngine();
@@ -48,6 +57,14 @@ class SecurityTelemetryTests {
                 mem.setId(12345L);
             }
             return mem;
+        });
+
+        when(quarantinedMemoryRepository.save(any(QuarantinedMemory.class))).thenAnswer(invocation -> {
+            QuarantinedMemory qm = invocation.getArgument(0);
+            if (qm.getId() == null) {
+                qm.setId(12345L);
+            }
+            return qm;
         });
     }
 
@@ -96,12 +113,25 @@ class SecurityTelemetryTests {
     void testReviewDecisionTelemetry() {
         SecurityAnalyzer mockRuleAnalyzer = content -> new SecurityAnalysisResult("MEDIUM", 55, "SQL_INJECTION", "Rule warning", 0.9, "RULE");
 
+        MemoryPersistenceService mps = new MemoryPersistenceService(
+                memoryRepository,
+                quarantinedMemoryRepository,
+                null,
+                securityLogService
+        );
+
         MemoryService service = new MemoryService(
                 memoryRepository,
                 List.of(mockRuleAnalyzer),
+                new ProvenanceAnalyzer(),
+                new ContextAnalyzer(),
+                new SecuritySignalExtractor(),
+                new MemoryContentAnalyzer(),
+                new MemoryRiskAggregator(),
                 securityLogService,
                 policyEngine,
                 riskAggregator,
+                mps,
                 testExecutor,
                 testProperties
         );

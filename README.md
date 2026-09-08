@@ -151,6 +151,52 @@ Additional testing will be added as the platform evolves.
 * Memory Provenance and Context Analysis Foundation (Day 18)
 * Memory Security Signal Extraction & Risk Feature Foundation (Day 19)
 * AI Semantic Security Analysis & Ambiguous Memory Detection Foundation (Day 20)
+* Context-Aware Policy Engine Layer & Multi-Dimensional Decision Rules (Day 21)
+* Secure Memory Persistence & Quarantine Management (Day 22)
+* Security Decision Explainability & Threat Intelligence Layer (Day 23)
+
+### 🛡️ Day 21 — Context-Aware Policy Engine Layer
+
+#### Objective
+Established `PolicyEngine` as the single security decision authority for MemoryGuard, separating security policy evaluation from detection and risk aggregation.
+
+#### Core Principle
+> **Detection & Risk Aggregation inform; PolicyEngine decides.**
+
+#### Decisions & Rules
+- `ALLOW` (`PERMITTED`): Low risk score below threshold with clean security baseline.
+- `REVIEW` (`QUARANTINED`): Medium risk, ambiguous signals, or low-confidence assessments (Risk != Certainty).
+- `BLOCK` (`DENIED`): High risk score (>= 80) or critical threat signals with high confidence.
+
+---
+
+### 🛡️ Day 22 — Secure Memory Persistence & Quarantine Management
+
+#### Objective
+Enforced strict memory storage routing matching PolicyEngine decisions with absolute isolation guarantees.
+
+#### Storage Invariants
+- **ALLOW (PERMITTED)**: Safe memories saved to `memories` active store with status `SAFE`.
+- **REVIEW (QUARANTINED)**: Isolated in `quarantined_memories` table. Strictly barred from active memory retrieval.
+- **BLOCK (DENIED)**: Reject malicious memories and log cryptographic SHA-256 tombstones in `denied_memory_records`. Plaintext content is scrubbed.
+- **Operator Control Plane**: `QuarantineController` (`/api/quarantine`) with explicit operator authorization for `APPROVE` and `REJECT` actions.
+
+---
+
+### 🛡️ Day 23 — Security Decision Explainability & Threat Intelligence
+
+#### Objective
+Built a transparent, deterministic explainability and threat intelligence layer making every MemoryGuard decision explainable and auditable without changing policy decisions or leaking sensitive plaintext.
+
+#### Core Invariant
+> **PolicyEngine decides. ExplanationEngine explains.**
+> `Explanation.finalDecision == PolicyDecisionResult.finalDecision`
+
+#### Key Capabilities Implemented
+- **Structured Threat Categories**: `PROMPT_INJECTION`, `DATA_POISONING`, `SENSITIVE_DATA`, `PROVENANCE_ANOMALY`, `TRUST_VIOLATION`, `MANIPULATION`, `POLICY_VIOLATION`, `UNKNOWN`.
+- **Evidence Chain**: Explicit step-by-step trace: `Analyzer Finding -> Risk Contribution -> Cumulative Risk Score -> Policy Rule -> Final Decision`.
+- **Security REST API**: `GET /api/security/decisions/{memoryId}` and `GET /api/security/decisions/correlation/{correlationId}` with zero plaintext leak for denied memories.
+- **Test Suite Results**: 215/215 tests passing with 0 failures and 0 errors.
 
 ### 🛡️ Day 17 — Memory Content Analysis Layer
 

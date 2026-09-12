@@ -53,8 +53,12 @@ public enum ProvenanceType {
         if (value == null || value.trim().isEmpty()) {
             return UNKNOWN;
         }
+        String upper = value.trim().toUpperCase();
+        if ("USER_INPUT".equals(upper)) return USER;
+        if ("EXTERNAL_TOOL".equals(upper)) return TOOL;
+        if ("AGENT_SCRATCHPAD".equals(upper)) return AGENT;
         try {
-            return ProvenanceType.valueOf(value.trim().toUpperCase());
+            return ProvenanceType.valueOf(upper);
         } catch (IllegalArgumentException e) {
             return UNKNOWN;
         }

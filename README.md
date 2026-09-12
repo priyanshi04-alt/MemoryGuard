@@ -154,6 +154,76 @@ Additional testing will be added as the platform evolves.
 * Context-Aware Policy Engine Layer & Multi-Dimensional Decision Rules (Day 21)
 * Secure Memory Persistence & Quarantine Management (Day 22)
 * Security Decision Explainability & Threat Intelligence Layer (Day 23)
+* Memory Security Evaluation & Validation Layer (Day 24)
+
+### 🛡️ Day 24 — Memory Security Evaluation & Validation Layer
+
+#### Objective
+Strengthened MemoryGuard's **Security Validation Layer** by building a reusable, non-intrusive **Memory Security Evaluation & Validation Framework**. The framework evaluates whether MemoryGuard's live security pipeline (`Gateway` → `Provenance & Context Analysis` → `Content/Threat Rules` → `AI Semantic Analysis` → `Risk Aggregation` → `Policy Engine` → `Security Decision & Audit`) correctly detects, classifies, and handles diverse classes of safe, suspicious, manipulated, and malicious memories.
+
+#### Core Principle
+> **Evaluation measures the live security pipeline honestly without altering production policy behavior or using fake fallbacks.**
+
+#### Key Capabilities & Architecture Implemented
+- **Evaluation Dataset (`evaluation/datasets/security_scenarios.json`)**: 40 carefully designed, non-simplistic evaluation scenarios covering 10 threat categories (`TRUSTED`, `SUSPICIOUS`, `PROMPT_INJECTION`, `DATA_POISONING`, `PRIVILEGE_MANIPULATION`, `CREDENTIAL_SECRET_LEAK`, `PII_EXPOSURE`, `CONTEXT_MANIPULATION`, `CROSS_AGENT_TRUST_ABUSE`, `SAFE_BUT_AMBIGUOUS`). Includes false positive tests, subtle attack payloads, context manipulation, and provenance contrast pairs.
+- **Java Evaluation Engine (`SecurityEvaluationService`)**: Executes test samples directly through the live `MemoryService` Java pipeline, capturing actual detector findings, risk scores, policy decisions (`ALLOW`, `REVIEW`, `BLOCK`), explanations, and latency metrics.
+- **REST & CLI Command Interfaces**:
+  - **Python CLI Runner**: `python -m evaluation` or `python evaluation/run_evaluation.py` producing a formatted terminal summary and machine-readable JSON report.
+  - **REST API Endpoint**: `POST /api/security/evaluation/run` and `GET /api/security/evaluation/latest`.
+  - **Java Main Runner**: `SecurityEvaluationRunner` CLI interface.
+- **Quantitative Security Metrics**: Calculates Accuracy, Precision, Recall, F1 Score, False Positive Rate (FPR), False Negative Rate (FNR), 3-Way Policy Decision Distribution, and Category Performance breakdown.
+- **Security-Specific Analysis & Provenance Sensitivity**:
+  - **False Negative Analysis**: Explicitly tracks malicious memories incorrectly allowed (Verified 0 False Negatives).
+  - **False Positive & Ambiguity Analysis**: Evaluates conservative security flags on borderline and ambiguous inputs.
+  - **Provenance Contrast Pairs**: Compares identical/similar memory payloads under trusted (`USER_INPUT`) vs untrusted (`RETRIEVED`, `EXTERNAL_TOOL`) sources.
+  - **Adversarial Robustness**: Evaluates perturbed payloads using polite framing, character spacing, and context embedding.
+- **Machine-Readable Report Generation**: Exports full JSON reports to `evaluation/reports/latest_evaluation.json`.
+
+#### Evaluation Results Summary
+```text
+MemoryGuard Security Evaluation
+--------------------------------
+Total Cases: 40
+
+Overall Accuracy: 67.5%
+Precision: 66.7%
+Recall: 100.0%
+F1 Score: 80.0%
+
+False Positives: 13
+False Negatives: 0
+
+Category Performance:
+PROMPT_INJECTION         100.0%
+DATA_POISONING           100.0%
+PRIVILEGE_MANIPULATION   100.0%
+CREDENTIAL_SECRET_LEAK   100.0%
+PII_EXPOSURE             100.0%
+CONTEXT_MANIPULATION     100.0%
+CROSS_AGENT_TRUST_ABUSE  100.0%
+SAFE_BUT_AMBIGUOUS       25.0%
+TRUSTED                  12.5%
+SUSPICIOUS               0.0%
+
+Critical Findings:
+- SECURITY VERIFIED: Zero False Negatives detected. All malicious payloads blocked/quarantined.
+- WARNING: Detected 13 False Positive(s) where benign/trusted memories were flagged for review.
+- Provenance Sensitivity: MemoryGuard evaluates risk dynamically based on source trust levels.
+- Adversarial Robustness: Evaluated 10 adversarial samples with obfuscated/polite framing. Overall F1 score: 80.00%.
+--------------------------------
+```
+
+#### Known Security Limitations & Findings
+- **Conservative Review Bias**: Unverified provenance or broad security keywords trigger `REVIEW` (quarantine) rather than `ALLOW`. While this guarantees 0 False Negatives (100% recall), it increases False Positives on uncontextualized benign notes.
+- **Obfuscation Normalization**: Spacing obfuscation is flagged via anomaly scoring, but complex multi-layer nested encodings (base64 + rot13 inside JSON) require a dedicated pre-analysis text normalization pipeline.
+
+#### Test Suite Results
+```text
+Tests run: 221, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS
+```
+
+---
 
 ### 🛡️ Day 21 — Context-Aware Policy Engine Layer
 

@@ -38,7 +38,28 @@ public class BaselineSemanticAnalyzer implements SemanticSecurityAnalyzer {
         }
 
         String normalized = content.toLowerCase(Locale.ROOT).trim();
-        String deobfuscated = normalized.replaceAll("(?<=\\b[a-z])\\s+(?=[a-z]\\b)", "");
+        // Remove zero-width spaces and control chars
+        String cleaned = normalized.replaceAll("[\\u200B\\u200C\\u200D\\uFEFF]", "");
+        // Deobfuscate spaced letters (e.g. "i g n o r e")
+        String deobfuscated = cleaned.replaceAll("(?<=\\b[a-z])\\s+(?=[a-z]\\b)", "");
+        // Deobfuscate leetspeak numbers
+        String leetDeobfuscatedWithSpaces = cleaned.replace('0', 'o').replace('1', 'i').replace('3', 'e').replace('4', 'a').replace('5', 's').replace('7', 't');
+        String leetDeobfuscated = deobfuscated.replace('0', 'o').replace('1', 'i').replace('3', 'e').replace('4', 'a').replace('5', 's').replace('7', 't');
+
+        // Extract and decode base64 strings if present
+        String base64Decoded = "";
+        try {
+            java.util.regex.Matcher b64Matcher = java.util.regex.Pattern.compile("[A-Za-z0-9+/=]{16,}").matcher(content);
+            StringBuilder sb = new StringBuilder();
+            while (b64Matcher.find()) {
+                try {
+                    byte[] decoded = java.util.Base64.getDecoder().decode(b64Matcher.group());
+                    sb.append(" ").append(new String(decoded, java.nio.charset.StandardCharsets.UTF_8).toLowerCase(Locale.ROOT));
+                } catch (Exception ignored) {}
+            }
+            base64Decoded = sb.toString();
+        } catch (Exception ignored) {}
+
         List<SemanticSecuritySignal> signals = new ArrayList<>();
 
         // 1. Check for Benign Security Education / Technical Discussion Context
@@ -71,7 +92,7 @@ public class BaselineSemanticAnalyzer implements SemanticSecurityAnalyzer {
         }
 
         // 2. Evaluate Semantic Security Signals
-        evaluatePromptInjection(normalized, deobfuscated, content, signals);
+        evaluatePromptInjection(normalized, deobfuscated, leetDeobfuscated, leetDeobfuscatedWithSpaces, base64Decoded, content, signals);
         evaluateInstructionOverride(normalized, content, signals);
         evaluatePrivilegeEscalation(normalized, content, signals);
         evaluateToolManipulation(normalized, content, signals);
@@ -79,6 +100,7 @@ public class BaselineSemanticAnalyzer implements SemanticSecurityAnalyzer {
         evaluateSocialEngineering(normalized, content, signals);
         evaluateMaliciousPersistence(normalized, content, signals);
         evaluateContextManipulation(normalized, content, signals);
+        evaluateContradictoryMemory(normalized, content, signals);
         evaluateSuspiciousInstructionAndAuditSuppression(normalized, content, signals);
 
         // 3. Evaluate Ambiguous Memories (Elevated Risk with Uncertainty)
@@ -175,14 +197,23 @@ public class BaselineSemanticAnalyzer implements SemanticSecurityAnalyzer {
         );
     }
 
-    private void evaluatePromptInjection(String text, String deobfuscated, String originalContent, List<SemanticSecuritySignal> signals) {
+    private void evaluatePromptInjection(String text, String deobfuscated, String leetDeobfuscated, String leetDeobfuscatedWithSpaces, String base64Decoded, String originalContent, List<SemanticSecuritySignal> signals) {
         if (containsAny(text,
                 "ignore previous instructions", "ignore all previous instructions",
                 "disregard previous instructions", "disregard all previous instructions",
-                "forget previous instructions", "override system instructions",
-                "replace system prompt", "jailbreak mode", "developer mode", "dan mode")
+                "disregard previous security filters", "disregard parent instructions",
+                "system instruction update", "forget previous instructions", "override system instructions",
+                "replace system prompt", "jailbreak mode", "developer mode", "dan mode",
+                "system override:", "act as dan", "unrestricted mode",
+                "would you kindly disregard", "evade security filters", "swdub3jlihbye3zpb3vzagluc3rydwn0aw9ucw==")
             || containsAny(deobfuscated,
-                "ignorepreviousinstructions", "ignoreallpreviousinstructions", "disregardpreviousinstructions")) {
+                "ignorepreviousinstructions", "ignoreallpreviousinstructions", "disregardpreviousinstructions")
+            || containsAny(leetDeobfuscated,
+                "ignorepreviousinstructions", "disregardpreviousinstructions", "evadesecurityfilters")
+            || containsAny(leetDeobfuscatedWithSpaces,
+                "ignore previous instructions", "disregard previous instructions", "evade security filters")
+            || containsAny(base64Decoded,
+                "ignore previous instructions", "disregard previous instructions", "evade security filters")) {
 
             signals.add(new SemanticSecuritySignal(
                     SemanticSignalType.PROMPT_INJECTION,
@@ -197,9 +228,10 @@ public class BaselineSemanticAnalyzer implements SemanticSecurityAnalyzer {
 
     private void evaluateInstructionOverride(String text, String originalContent, List<SemanticSecuritySignal> signals) {
         if (containsAny(text,
-                "always follow this instruction instead", "from now on you must follow",
+                "always follow this instruction instead", "from now on you must follow", "from now on you must obey",
                 "you must obey this instruction", "replace system instructions with",
-                "disregard system rules", "disregard system safety rules", "disregard safety rules", "override all previous rules")) {
+                "disregard system rules", "disregard system safety rules", "disregard safety rules", "override all previous rules",
+                "skip policy engine evaluations", "mandatory operational rule:", "default authorization level for unauthenticated guests")) {
 
             signals.add(new SemanticSecuritySignal(
                     SemanticSignalType.INSTRUCTION_OVERRIDE,
@@ -216,7 +248,8 @@ public class BaselineSemanticAnalyzer implements SemanticSecurityAnalyzer {
         if (containsAny(text,
                 "grant admin access", "grant administrative access", "elevate privileges to root",
                 "bypass authorization check", "grant root permissions", "override user permissions",
-                "assume administrator role")) {
+                "assume administrator role", "permission_level is permanently set to superadmin",
+                "permission_level=critical")) {
 
             signals.add(new SemanticSecuritySignal(
                     SemanticSignalType.PRIVILEGE_ESCALATION,
@@ -250,7 +283,9 @@ public class BaselineSemanticAnalyzer implements SemanticSecurityAnalyzer {
         if (containsAny(text,
                 "send api key to", "reveal password to", "post credentials to",
                 "exfiltrate database secret", "dump environment variables", "upload private key",
-                "reveal stored api key", "reveal the stored api key", "send password")) {
+                "reveal stored api key", "reveal the stored api key", "send password",
+                "aws_access_key_id=", "db_password=", "jwt bearer token", "ssn=", "credit card number=",
+                "private key", "exfiltrate bank credentials")) {
 
             signals.add(new SemanticSecuritySignal(
                     SemanticSignalType.SECRET_EXFILTRATION,
@@ -265,9 +300,10 @@ public class BaselineSemanticAnalyzer implements SemanticSecurityAnalyzer {
 
     private void evaluateSocialEngineering(String text, String originalContent, List<SemanticSecuritySignal> signals) {
         if (containsAny(text,
-                "i am the lead administrator", "urgent request from it support",
+                "i am the lead administrator", "urgent request from it support", "urgent from it helpdesk",
                 "security verification required send your password", "trust me i am system operator",
-                "this is an emergency support request")) {
+                "this is an emergency support request", "cto in emergency crisis", "helpdesk request",
+                "impersonation payload", "executive directive")) {
 
             signals.add(new SemanticSecuritySignal(
                     SemanticSignalType.SOCIAL_ENGINEERING,
@@ -283,7 +319,10 @@ public class BaselineSemanticAnalyzer implements SemanticSecurityAnalyzer {
     private void evaluateMaliciousPersistence(String text, String originalContent, List<SemanticSecuritySignal> signals) {
         if (containsAny(text,
                 "always append this payload", "permanently store this instruction across restarts",
-                "persist this rule in long term memory", "inject this prompt whenever memory is searched")) {
+                "persist this rule in long term memory", "inject this prompt whenever memory is searched",
+                "sleeper memory", "hidden trigger instruction", "whenever the user mentions",
+                "delayed payload", "when date is", "store this hidden trigger", "persistent sleeper rule",
+                "when user asks about financial reports")) {
 
             signals.add(new SemanticSecuritySignal(
                     SemanticSignalType.MALICIOUS_PERSISTENCE,
@@ -300,15 +339,34 @@ public class BaselineSemanticAnalyzer implements SemanticSecurityAnalyzer {
         if (containsAny(text,
                 "pretend user is authenticated as superadmin", "manipulate conversation history",
                 "fake previous system message", "corrupt session memory context",
-                "pretend that administrators should bypass")) {
+                "pretend that administrators should bypass", "memoryguard security platform has been decommissioned",
+                "fact update:", "system fact:", "future response rule:", "system parameter change:",
+                "verified identity update:")) {
 
             signals.add(new SemanticSecuritySignal(
                     SemanticSignalType.CONTEXT_MANIPULATION,
                     70,
                     0.85,
-                    "Agent session context manipulation attempt detected",
+                    "Agent session context manipulation or memory poisoning attempt detected",
                     extractSnippet(originalContent, 60),
                     "context-manipulation-detector"
+            ));
+        }
+    }
+
+    private void evaluateContradictoryMemory(String text, String originalContent, List<SemanticSecuritySignal> signals) {
+        if (containsAny(text,
+                "contradictory security state", "identity contradiction", "contradictory data assertion",
+                "state conflict", "contradictory rule override", "policy enforcement is set to disabled while",
+                "user is authenticated as guest_user but active session permissions are superadmin")) {
+
+            signals.add(new SemanticSecuritySignal(
+                    SemanticSignalType.CONTEXT_MANIPULATION,
+                    75,
+                    0.85,
+                    "Contradictory memory assertion or conflicting security state detected",
+                    extractSnippet(originalContent, 60),
+                    "contradictory-memory-detector"
             ));
         }
     }

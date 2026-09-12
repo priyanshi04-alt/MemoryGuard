@@ -27,6 +27,7 @@ public class QuarantineManagementService {
     private final MemoryRepository memoryRepository;
     private final SecurityLogService securityLogService;
     private final PolicyEngine policyEngine;
+    private final SecurityAuditService securityAuditService;
 
     @Autowired
     public QuarantineManagementService(
@@ -34,13 +35,25 @@ public class QuarantineManagementService {
             DeniedMemoryRepository deniedMemoryRepository,
             MemoryRepository memoryRepository,
             SecurityLogService securityLogService,
-            PolicyEngine policyEngine) {
+            PolicyEngine policyEngine,
+            @Autowired(required = false) SecurityAuditService securityAuditService) {
 
         this.quarantinedMemoryRepository = quarantinedMemoryRepository;
         this.deniedMemoryRepository = deniedMemoryRepository;
         this.memoryRepository = memoryRepository;
         this.securityLogService = securityLogService;
         this.policyEngine = policyEngine != null ? policyEngine : new PolicyEngine();
+        this.securityAuditService = securityAuditService;
+    }
+
+    public QuarantineManagementService(
+            QuarantinedMemoryRepository quarantinedMemoryRepository,
+            DeniedMemoryRepository deniedMemoryRepository,
+            MemoryRepository memoryRepository,
+            SecurityLogService securityLogService,
+            PolicyEngine policyEngine) {
+
+        this(quarantinedMemoryRepository, deniedMemoryRepository, memoryRepository, securityLogService, policyEngine, null);
     }
 
     public List<QuarantinedMemory> listQuarantinedMemories(String status) {
@@ -53,12 +66,28 @@ public class QuarantineManagementService {
     public Optional<QuarantinedMemory> getQuarantinedMemoryById(Long id) {
         Optional<QuarantinedMemory> opt = quarantinedMemoryRepository.findById(id);
         if (opt.isPresent()) {
+            QuarantinedMemory qm = opt.get();
             createAuditLog(
                     id,
-                    opt.get().getCorrelationId(),
+                    qm.getCorrelationId(),
                     "QUARANTINE_INSPECTED",
                     "Quarantined memory record inspected for security review."
             );
+
+            if (securityAuditService != null) {
+                securityAuditService.recordEvent(
+                        "QUARANTINE_INSPECTED",
+                        qm.getCorrelationId(),
+                        null,
+                        id,
+                        null,
+                        "REVIEW",
+                        qm.getRiskScore(),
+                        qm.getContributingFactors(),
+                        qm.getPolicyRule(),
+                        "QUARANTINE_MANAGEMENT"
+                );
+            }
         }
         return opt;
     }
@@ -132,6 +161,45 @@ public class QuarantineManagementService {
                 "Memory permitted into active store via quarantine release."
         );
 
+        if (securityAuditService != null) {
+            securityAuditService.recordEvent(
+                    "QUARANTINE_APPROVED",
+                    qm.getCorrelationId(),
+                    savedActiveMemory.getId(),
+                    quarantineId,
+                    operatorId,
+                    "ALLOW",
+                    10,
+                    qm.getContributingFactors(),
+                    "QUARANTINE_APPROVED_BY_OPERATOR",
+                    "QUARANTINE_MANAGEMENT"
+            );
+            securityAuditService.recordEvent(
+                    "QUARANTINE_RELEASED",
+                    qm.getCorrelationId(),
+                    savedActiveMemory.getId(),
+                    quarantineId,
+                    operatorId,
+                    "ALLOW",
+                    10,
+                    qm.getContributingFactors(),
+                    "QUARANTINE_RELEASED_TO_ACTIVE_STORE",
+                    "QUARANTINE_MANAGEMENT"
+            );
+            securityAuditService.recordEvent(
+                    "MEMORY_PERMITTED",
+                    qm.getCorrelationId(),
+                    savedActiveMemory.getId(),
+                    quarantineId,
+                    operatorId,
+                    "ALLOW",
+                    10,
+                    qm.getContributingFactors(),
+                    "MEMORY_PERMITTED_VIA_QUARANTINE_RELEASE",
+                    "QUARANTINE_MANAGEMENT"
+            );
+        }
+
         return savedActiveMemory;
     }
 
@@ -186,6 +254,33 @@ public class QuarantineManagementService {
                 "MEMORY_DENIED",
                 "Quarantined memory rejected and converted to denied tombstone record."
         );
+
+        if (securityAuditService != null) {
+            securityAuditService.recordEvent(
+                    "QUARANTINE_REJECTED",
+                    qm.getCorrelationId(),
+                    null,
+                    quarantineId,
+                    operatorId,
+                    "BLOCK",
+                    qm.getRiskScore(),
+                    qm.getContributingFactors(),
+                    "QUARANTINE_REJECTED_BY_OPERATOR",
+                    "QUARANTINE_MANAGEMENT"
+            );
+            securityAuditService.recordEvent(
+                    "MEMORY_DENIED",
+                    qm.getCorrelationId(),
+                    null,
+                    quarantineId,
+                    operatorId,
+                    "BLOCK",
+                    qm.getRiskScore(),
+                    qm.getContributingFactors(),
+                    "MEMORY_DENIED_VIA_QUARANTINE_REJECTION",
+                    "QUARANTINE_MANAGEMENT"
+            );
+        }
 
         return savedDmr;
     }

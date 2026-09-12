@@ -25,18 +25,30 @@ public class MemoryPersistenceService {
     private final QuarantinedMemoryRepository quarantinedMemoryRepository;
     private final DeniedMemoryRepository deniedMemoryRepository;
     private final SecurityLogService securityLogService;
+    private final SecurityAuditService securityAuditService;
 
     @Autowired
     public MemoryPersistenceService(
             MemoryRepository memoryRepository,
             QuarantinedMemoryRepository quarantinedMemoryRepository,
             DeniedMemoryRepository deniedMemoryRepository,
-            SecurityLogService securityLogService) {
+            SecurityLogService securityLogService,
+            @Autowired(required = false) SecurityAuditService securityAuditService) {
 
         this.memoryRepository = memoryRepository;
         this.quarantinedMemoryRepository = quarantinedMemoryRepository;
         this.deniedMemoryRepository = deniedMemoryRepository;
         this.securityLogService = securityLogService;
+        this.securityAuditService = securityAuditService;
+    }
+
+    public MemoryPersistenceService(
+            MemoryRepository memoryRepository,
+            QuarantinedMemoryRepository quarantinedMemoryRepository,
+            DeniedMemoryRepository deniedMemoryRepository,
+            SecurityLogService securityLogService) {
+
+        this(memoryRepository, quarantinedMemoryRepository, deniedMemoryRepository, securityLogService, null);
     }
 
     public PersistenceResult enforcePersistence(Memory memory, PolicyDecisionResult policyResult) {
@@ -95,6 +107,21 @@ public class MemoryPersistenceService {
                     riskAssessment
             );
 
+            if (securityAuditService != null) {
+                securityAuditService.recordEvent(
+                        "MEMORY_PERMITTED",
+                        memory.getCorrelationId(),
+                        memoryId,
+                        null,
+                        null,
+                        "ALLOW",
+                        policyResult.getRiskScore(),
+                        String.join(" | ", policyResult.getContributingFactors()),
+                        policyResult.getPolicyRule(),
+                        riskAssessment != null ? riskAssessment.getDominantAnalyzerType() : "POLICY_ENGINE"
+                );
+            }
+
             return new PersistenceResult(
                     "PERMITTED",
                     memoryId,
@@ -143,6 +170,21 @@ public class MemoryPersistenceService {
                     riskAssessment
             );
 
+            if (securityAuditService != null) {
+                securityAuditService.recordEvent(
+                        "MEMORY_QUARANTINED",
+                        memory.getCorrelationId(),
+                        null,
+                        quarantineId,
+                        null,
+                        "REVIEW",
+                        policyResult.getRiskScore(),
+                        String.join(" | ", policyResult.getContributingFactors()),
+                        policyResult.getPolicyRule(),
+                        riskAssessment != null ? riskAssessment.getDominantAnalyzerType() : "POLICY_ENGINE"
+                );
+            }
+
             return new PersistenceResult(
                     "QUARANTINED",
                     null,
@@ -182,6 +224,21 @@ public class MemoryPersistenceService {
                 memory,
                 riskAssessment
         );
+
+        if (securityAuditService != null) {
+            securityAuditService.recordEvent(
+                    "MEMORY_DENIED",
+                    memory.getCorrelationId(),
+                    null,
+                    null,
+                    null,
+                    "BLOCK",
+                    policyResult.getRiskScore(),
+                    String.join(" | ", policyResult.getContributingFactors()),
+                    policyResult.getPolicyRule(),
+                    riskAssessment != null ? riskAssessment.getDominantAnalyzerType() : "POLICY_ENGINE"
+            );
+        }
 
         return new PersistenceResult(
                 "DENIED",

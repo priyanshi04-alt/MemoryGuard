@@ -92,11 +92,14 @@ public class AdversarialSecurityEvaluatorTests {
         );
 
         // Load evaluation corpus JSON dataset
-        try (InputStream is = getClass().getResourceAsStream("/adversarial_evaluation_corpus.json")) {
-            assertNotNull(is, "adversarial_evaluation_corpus.json must be present in test resources");
-            AdversarialSample[] samples = objectMapper.readValue(is, AdversarialSample[].class);
-            corpusSamples = Arrays.asList(samples);
+        InputStream is = getClass().getResourceAsStream("/adversarial_test_corpus.json");
+        if (is == null) {
+            is = getClass().getResourceAsStream("/adversarial_evaluation_corpus.json");
         }
+        assertNotNull(is, "Adversarial corpus dataset must be present in test resources");
+        AdversarialSample[] samples = objectMapper.readValue(is, AdversarialSample[].class);
+        corpusSamples = Arrays.asList(samples);
+        is.close();
     }
 
     @AfterEach

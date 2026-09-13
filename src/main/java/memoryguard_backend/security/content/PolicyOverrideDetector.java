@@ -28,7 +28,13 @@ public class PolicyOverrideDetector implements ContentDetector {
             "bypass the security controls",
             "bypass security controls",
             "bypass the security rules",
-            "disable the security policy"
+            "disable the security policy",
+            "suspension of security",
+            "suspend security",
+            "override all previous",
+            "disregard system",
+            "disregard safety",
+            "disregard security"
     };
 
     @Override

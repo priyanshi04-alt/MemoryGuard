@@ -120,6 +120,9 @@ public class SecurityEvaluationFrameworkTests {
         EvaluationReport report = evaluationService.runEvaluation();
         assertNotNull(report.getFalsePositives());
         assertNotNull(report.getFalseNegatives());
+        for (EvaluationResult fn : report.getFalseNegatives()) {
+            System.err.println(">>> FN SCENARIO ID: " + fn.getScenarioId() + " | Content: " + fn.getMemoryContent() + " | Actual Decision: " + fn.getActualDecision());
+        }
         assertEquals(0, report.getFalseNegatives().size(), "Zero false negatives expected");
     }
 

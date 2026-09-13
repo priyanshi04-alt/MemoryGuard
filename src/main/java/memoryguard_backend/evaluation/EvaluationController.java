@@ -17,14 +17,24 @@ public class EvaluationController {
     }
 
     @PostMapping("/run")
-    public ResponseEntity<EvaluationReport> runEvaluation() {
-        EvaluationReport report = evaluationService.runEvaluation();
+    public ResponseEntity<EvaluationReport> runEvaluation(
+            @RequestParam(value = "mode", required = false, defaultValue = "RULES_PLUS_AI") String mode) {
+        EvaluationMode evalMode = EvaluationMode.fromString(mode);
+        EvaluationReport report = evaluationService.runEvaluation(evalMode);
+        return ResponseEntity.ok(report);
+    }
+
+    @PostMapping("/benchmark")
+    public ResponseEntity<EvaluationReport> runBenchmark(
+            @RequestParam(value = "mode", required = false, defaultValue = "COMPARATIVE") String mode) {
+        EvaluationMode evalMode = EvaluationMode.fromString(mode);
+        EvaluationReport report = evaluationService.runEvaluation(evalMode);
         return ResponseEntity.ok(report);
     }
 
     @PostMapping("/adversarial")
     public ResponseEntity<EvaluationReport> runAdversarialEvaluation() {
-        EvaluationReport report = evaluationService.runEvaluation();
+        EvaluationReport report = evaluationService.runEvaluation(EvaluationMode.RULES_PLUS_AI);
         return ResponseEntity.ok(report);
     }
 

@@ -7,10 +7,11 @@ public class EvaluationScenario {
 
     private String id;
     private String attackId;
+    private String caseId;
     private String memoryContent;
-    private String provenance; // USER_INPUT, SYSTEM, AGENT_SCRATCHPAD, RETRIEVED, EXTERNAL_TOOL
+    private String provenance; // USER_INPUT, SYSTEM, AGENT_SCRATCHPAD, RETRIEVED, EXTERNAL_TOOL, UNTRUSTED
     private String context;
-    private String expectedCategory; // e.g. TRUSTED, SUSPICIOUS, PROMPT_INJECTION, DATA_POISONING, etc.
+    private String expectedCategory; // e.g. NORMAL, PROMPT_INJECTION, INSTRUCTION_HIJACKING, SENSITIVE_INFORMATION, etc.
     private String attackCategory;
     private String expectedDecision; // ALLOW, REVIEW, BLOCK
     private String expectedRiskLevel; // LOW, MEDIUM, HIGH, CRITICAL
@@ -30,6 +31,7 @@ public class EvaluationScenario {
                               String pairId, boolean isAdversarial) {
         this.id = id;
         this.attackId = id;
+        this.caseId = id;
         this.memoryContent = memoryContent;
         this.provenance = provenance;
         this.context = context;
@@ -46,21 +48,35 @@ public class EvaluationScenario {
     }
 
     public String getId() {
-        return attackId != null ? attackId : id;
+        if (caseId != null) return caseId;
+        if (attackId != null) return attackId;
+        return id;
     }
 
     public void setId(String id) {
         this.id = id;
         if (this.attackId == null) this.attackId = id;
+        if (this.caseId == null) this.caseId = id;
+    }
+
+    public String getCaseId() {
+        return getId();
+    }
+
+    public void setCaseId(String caseId) {
+        this.caseId = caseId;
+        if (this.id == null) this.id = caseId;
+        if (this.attackId == null) this.attackId = caseId;
     }
 
     public String getAttackId() {
-        return attackId != null ? attackId : id;
+        return getId();
     }
 
     public void setAttackId(String attackId) {
         this.attackId = attackId;
         if (this.id == null) this.id = attackId;
+        if (this.caseId == null) this.caseId = attackId;
     }
 
     public String getMemoryContent() {

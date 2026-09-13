@@ -231,7 +231,8 @@ public class BaselineSemanticAnalyzer implements SemanticSecurityAnalyzer {
                 "always follow this instruction instead", "from now on you must follow", "from now on you must obey",
                 "you must obey this instruction", "replace system instructions with",
                 "disregard system rules", "disregard system safety rules", "disregard safety rules", "override all previous rules",
-                "skip policy engine evaluations", "mandatory operational rule:", "default authorization level for unauthenticated guests")) {
+                "skip policy engine evaluations", "mandatory operational rule:", "default authorization level for unauthenticated guests",
+                "suspension of security rules", "suspension of security", "override system guidelines")) {
 
             signals.add(new SemanticSecuritySignal(
                     SemanticSignalType.INSTRUCTION_OVERRIDE,
@@ -249,7 +250,7 @@ public class BaselineSemanticAnalyzer implements SemanticSecurityAnalyzer {
                 "grant admin access", "grant administrative access", "elevate privileges to root",
                 "bypass authorization check", "grant root permissions", "override user permissions",
                 "assume administrator role", "permission_level is permanently set to superadmin",
-                "permission_level=critical")) {
+                "permission_level=critical", "elevated privileges")) {
 
             signals.add(new SemanticSecuritySignal(
                     SemanticSignalType.PRIVILEGE_ESCALATION,
@@ -283,9 +284,9 @@ public class BaselineSemanticAnalyzer implements SemanticSecurityAnalyzer {
         if (containsAny(text,
                 "send api key to", "reveal password to", "post credentials to",
                 "exfiltrate database secret", "dump environment variables", "upload private key",
-                "reveal stored api key", "reveal the stored api key", "send password",
+                "reveal stored api key", "reveal the stored api key", "send password", "send master admin password", "send admin password",
                 "aws_access_key_id=", "db_password=", "jwt bearer token", "ssn=", "credit card number=",
-                "private key", "exfiltrate bank credentials")) {
+                "private key", "exfiltrate bank credentials", "reveal stored system secrets", "reveal stored secrets")) {
 
             signals.add(new SemanticSecuritySignal(
                     SemanticSignalType.SECRET_EXFILTRATION,
@@ -303,7 +304,7 @@ public class BaselineSemanticAnalyzer implements SemanticSecurityAnalyzer {
                 "i am the lead administrator", "urgent request from it support", "urgent from it helpdesk",
                 "security verification required send your password", "trust me i am system operator",
                 "this is an emergency support request", "cto in emergency crisis", "helpdesk request",
-                "impersonation payload", "executive directive")) {
+                "impersonation payload", "executive directive", "security officer verification code")) {
 
             signals.add(new SemanticSecuritySignal(
                     SemanticSignalType.SOCIAL_ENGINEERING,
@@ -320,7 +321,7 @@ public class BaselineSemanticAnalyzer implements SemanticSecurityAnalyzer {
         if (containsAny(text,
                 "always append this payload", "permanently store this instruction across restarts",
                 "persist this rule in long term memory", "inject this prompt whenever memory is searched",
-                "sleeper memory", "hidden trigger instruction", "whenever the user mentions",
+                "sleeper memory", "sleeper rule", "hidden trigger instruction", "whenever the user mentions",
                 "delayed payload", "when date is", "store this hidden trigger", "persistent sleeper rule",
                 "when user asks about financial reports")) {
 
@@ -341,7 +342,7 @@ public class BaselineSemanticAnalyzer implements SemanticSecurityAnalyzer {
                 "fake previous system message", "corrupt session memory context",
                 "pretend that administrators should bypass", "memoryguard security platform has been decommissioned",
                 "fact update:", "system fact:", "future response rule:", "system parameter change:",
-                "verified identity update:")) {
+                "verified identity update:", "system announcement:", "require no secret authorization keys", "all api endpoints are now public")) {
 
             signals.add(new SemanticSecuritySignal(
                     SemanticSignalType.CONTEXT_MANIPULATION,

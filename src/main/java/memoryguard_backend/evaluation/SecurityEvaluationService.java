@@ -1,12 +1,18 @@
 package memoryguard_backend.evaluation;
 
-import memoryguard_backend.security.BaselineSemanticAnalyzer;
-import memoryguard_backend.security.SemanticAnalysisResult;
-import memoryguard_backend.security.content.ContentAnalysisResult;
-import tools.jackson.databind.ObjectMapper;
 import memoryguard_backend.entity.Memory;
 import memoryguard_backend.entity.ProvenanceType;
+import memoryguard_backend.security.*;
+import memoryguard_backend.security.content.ContentAnalysisResult;
+import memoryguard_backend.security.content.ContentSecuritySignal;
+import memoryguard_backend.security.content.MemoryContentAnalyzer;
+import memoryguard_backend.security.context.ContextAnalysisResult;
+import memoryguard_backend.security.context.ContextAnalyzer;
+import memoryguard_backend.security.risk.MemoryRiskAggregator;
+import memoryguard_backend.security.signals.SecuritySignalExtractor;
 import memoryguard_backend.service.MemoryService;
+
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -22,20 +28,40 @@ public class SecurityEvaluationService {
 
     private final MemoryService memoryService;
     private final ObjectMapper objectMapper;
+    private final DatasetValidator datasetValidator;
     private EvaluationReport latestReport;
 
     @Autowired
     public SecurityEvaluationService(MemoryService memoryService) {
         this.memoryService = memoryService;
         this.objectMapper = new ObjectMapper();
+        this.datasetValidator = new DatasetValidator();
     }
 
     public synchronized EvaluationReport runEvaluation() {
+        return runEvaluation(EvaluationMode.RULES_PLUS_AI);
+    }
+
+    public synchronized EvaluationReport runEvaluation(EvaluationMode mode) {
         List<EvaluationScenario> scenarios = loadScenarios();
-        return runEvaluationOnScenarios(scenarios);
+        if (mode == EvaluationMode.COMPARATIVE) {
+            return runComparativeEvaluation(scenarios);
+        }
+        return runEvaluationOnScenarios(scenarios, mode);
     }
 
     public EvaluationReport runEvaluationOnScenarios(List<EvaluationScenario> scenarios) {
+        return runEvaluationOnScenarios(scenarios, EvaluationMode.RULES_PLUS_AI);
+    }
+
+    public EvaluationReport runEvaluationOnScenarios(List<EvaluationScenario> scenarios, EvaluationMode mode) {
+        if (scenarios == null || scenarios.isEmpty()) {
+            scenarios = loadScenarios();
+        }
+
+        // Validate dataset
+        datasetValidator.validate(scenarios);
+
         EvaluationReport report = new EvaluationReport();
         report.setDatasetSize(scenarios.size());
         report.setTotalCases(scenarios.size());
@@ -52,7 +78,8 @@ public class SecurityEvaluationService {
         Map<String, EvaluationResult> scenarioResultMap = new HashMap<>();
         Map<String, EvaluationResult> pairResultMap = new HashMap<>();
 
-        int tp = 0, tn = 0, fp = 0, fn = 0;
+        ConfusionMatrix confusionMatrix = new ConfusionMatrix();
+
         int allowCount = 0, reviewCount = 0, blockCount = 0;
         int ruleOnlyCount = 0, semanticOnlyCount = 0, bothCount = 0, neitherCount = 0;
         List<String> ruleOnlyScenarios = new ArrayList<>();
@@ -61,37 +88,90 @@ public class SecurityEvaluationService {
         List<String> neitherScenarios = new ArrayList<>();
 
         long totalDurationNs = 0;
-        BaselineSemanticAnalyzer baselineSemanticAnalyzer = new BaselineSemanticAnalyzer();
+
+        // Analyzers for isolated evaluation execution
+        MemoryContentAnalyzer contentAnalyzer = new MemoryContentAnalyzer();
+        SecuritySignalExtractor signalExtractor = new SecuritySignalExtractor();
+        ProvenanceAnalyzer provenanceAnalyzer = new ProvenanceAnalyzer();
+        ContextAnalyzer contextAnalyzer = new ContextAnalyzer();
+        BaselineSemanticAnalyzer semanticAnalyzer = new BaselineSemanticAnalyzer();
+        RiskAggregator riskAggregator = new RiskAggregator();
+        PolicyEngine policyEngine = new PolicyEngine();
 
         for (EvaluationScenario scenario : scenarios) {
-            Memory memory = new Memory();
-            memory.setContent(scenario.getMemoryContent());
-            memory.setProvenance(ProvenanceType.fromString(scenario.getProvenance()));
-
             long startTime = System.nanoTime();
-            Memory processedMemory = memoryService.createMemory(memory);
-            long endTime = System.nanoTime();
 
+            // Run isolated security evaluation (without polluting production storage)
+            String text = scenario.getMemoryContent();
+            ProvenanceType prov = ProvenanceType.fromString(scenario.getProvenance());
+
+            Memory mem = new Memory();
+            mem.setContent(text);
+            mem.setProvenance(prov);
+
+            List<SecurityAnalysisResult> resultsList = new ArrayList<>();
+
+            // 1. Provenance & Context Analysis
+            ProvenanceAnalysisResult provRes = provenanceAnalyzer.analyze(mem);
+            ContextAnalysisResult ctxRes = contextAnalyzer.analyze(mem);
+            resultsList.add(provRes);
+            resultsList.add(new SecurityAnalysisResult(
+                    ctxRes.getRiskLevel(),
+                    ctxRes.getRiskScore(),
+                    ctxRes.getCategory(),
+                    ctxRes.getReason(),
+                    0.90,
+                    "CONTEXT_ANALYZER"
+            ));
+
+            // 2. Content Rule Analysis
+            ContentAnalysisResult ruleContentRes = contentAnalyzer.analyze(text);
+            boolean ruleDetected = false;
+
+            if (ruleContentRes != null && !ruleContentRes.getSignals().isEmpty()) {
+                ruleDetected = true;
+                ContentSecuritySignal primarySignal = ruleContentRes.getSignals().get(0);
+                int ruleScore = "HIGH".equalsIgnoreCase(primarySignal.getSeverity()) || "CRITICAL".equalsIgnoreCase(primarySignal.getSeverity()) ? 85 : 50;
+                resultsList.add(new SecurityAnalysisResult(
+                        ruleScore >= 80 ? "HIGH" : "MEDIUM",
+                        ruleScore,
+                        primarySignal.getType() != null ? primarySignal.getType() : "RULE_SIGNAL",
+                        primarySignal.getDescription() != null ? primarySignal.getDescription() : "Rule signal detected",
+                        0.90,
+                        "RULE_ANALYZER"
+                ));
+            }
+
+            // 3. AI Semantic Analysis (Mode dependent)
+            SemanticAnalysisResult semRes = null;
+            boolean semanticDetected = false;
+
+            if (mode != EvaluationMode.RULES_ONLY) {
+                semRes = semanticAnalyzer.analyze(text);
+                if (semRes != null) {
+                    resultsList.add(semRes);
+                    semanticDetected = semRes.getRiskScore() >= 50 && !"BENIGN_SECURITY_CONTENT".equals(semRes.getCategory());
+                }
+            }
+
+            // 4. Risk Aggregation & PolicyEngine Decision Authority
+            AggregatedRiskAssessment assessment = riskAggregator.aggregateAssessment(resultsList);
+            PolicyDecisionResult decisionResult = policyEngine.evaluate(assessment);
+
+            long endTime = System.nanoTime();
             double latencyMs = (endTime - startTime) / 1_000_000.0;
             totalDurationNs += (endTime - startTime);
 
-            String status = processedMemory.getStatus(); // SAFE, QUARANTINED, DENIED
-            String actualDecision = "SAFE".equals(status) ? "ALLOW" : ("DENIED".equals(status) ? "BLOCK" : "REVIEW");
-            String actualFinalState = "SAFE".equals(status) ? "PERMITTED" : ("DENIED".equals(status) ? "DENIED" : "QUARANTINED");
+            String actualDecision = decisionResult.getDecision().name(); // ALLOW, REVIEW, BLOCK
+            String status = decisionResult.getPersistenceStatus(); // PERMITTED, QUARANTINED, DENIED
 
             if ("ALLOW".equals(actualDecision)) allowCount++;
             else if ("REVIEW".equals(actualDecision)) reviewCount++;
             else if ("BLOCK".equals(actualDecision)) blockCount++;
 
-            int riskScore = processedMemory.getRiskScore();
+            int riskScore = decisionResult.getRiskScore();
 
-            // Detector Attribution logic (Rule vs Semantic)
-            ContentAnalysisResult ruleRes = memoryService.analyzeContent(scenario.getMemoryContent());
-            boolean ruleDetected = ruleRes != null && ruleRes.getSignals() != null && !ruleRes.getSignals().isEmpty();
-
-            SemanticAnalysisResult semRes = baselineSemanticAnalyzer.analyze(scenario.getMemoryContent());
-            boolean semanticDetected = semRes != null && semRes.getRiskScore() >= 50 && !"BENIGN_SECURITY_CONTENT".equals(semRes.getCategory());
-
+            // Detector Attribution logic
             String attribution;
             if (ruleDetected && semanticDetected) {
                 attribution = "BOTH";
@@ -111,6 +191,9 @@ public class SecurityEvaluationService {
                 neitherScenarios.add(scenario.getId());
             }
 
+            // Record into Confusion Matrix
+            confusionMatrix.record(scenario.getExpectedDecision(), actualDecision);
+
             EvaluationResult result = new EvaluationResult();
             result.setScenarioId(scenario.getId());
             result.setAttackId(scenario.getId());
@@ -120,34 +203,30 @@ public class SecurityEvaluationService {
             result.setAttackType(scenario.getAttackType());
             result.setMemoryContent(scenario.getMemoryContent());
             result.setExpectedDecision(scenario.getExpectedDecision());
-            result.setExpectedRiskLevel(scenario.getExpectedRiskLevel() != null ? scenario.getExpectedRiskLevel() : (scenario.getExpectedRiskMin() != null && scenario.getExpectedRiskMin() >= 80 ? "HIGH" : "LOW"));
+            result.setExpectedRiskLevel(scenario.getExpectedRiskLevel() != null ? scenario.getExpectedRiskLevel() : "LOW");
             result.setExpectedSecurityReason(scenario.getExplanation());
             result.setActualDecision(actualDecision);
-            result.setActualStatus(status);
-            result.setActualFinalState(actualFinalState);
+            result.setActualStatus("ALLOW".equals(actualDecision) ? "SAFE" : ("BLOCK".equals(actualDecision) ? "DENIED" : "QUARANTINED"));
+            result.setActualFinalState(status);
             result.setRiskScore(riskScore);
-            result.setRiskLevel(riskScore >= 75 ? "CRITICAL" : (riskScore >= 50 ? "HIGH" : (riskScore >= 25 ? "MEDIUM" : "LOW")));
+            result.setRiskLevel(decisionResult.getRiskLevel());
             result.setRuleDetected(ruleDetected);
             result.setSemanticDetected(semanticDetected);
             result.setDetectionAttribution(attribution);
-            result.setDecisionReason(processedMemory.getRiskReason() != null ? processedMemory.getRiskReason() : "No reason provided");
-            result.setPolicyReason(processedMemory.getRiskReason() != null ? processedMemory.getRiskReason() : "Policy Engine Decision");
+            result.setDecisionReason(decisionResult.getExplanation());
+            result.setPolicyReason(decisionResult.getPolicyRule());
             result.setExplanation(scenario.getExplanation());
             result.setLatencyMs(latencyMs);
 
             List<String> analyzerContribs = new ArrayList<>();
             if (ruleDetected) analyzerContribs.add("RULE_ANALYZER");
             if (semanticDetected) analyzerContribs.add("SEMANTIC_ANALYZER");
-            if (scenario.getProvenance() != null) analyzerContribs.add("PROVENANCE_ANALYZER");
+            analyzerContribs.add("PROVENANCE_ANALYZER");
             analyzerContribs.add("CONTEXT_ANALYZER");
             result.setAnalyzerContributions(analyzerContribs);
 
-            List<String> contribFactors = new ArrayList<>();
-            contribFactors.add("SOURCE_" + scenario.getProvenance());
-            contribFactors.add("CATEGORY_" + scenario.getExpectedCategory());
-            if (processedMemory.getRiskCategory() != null) {
-                contribFactors.add("PRIMARY_THREAT_" + processedMemory.getRiskCategory());
-            }
+            List<String> contribFactors = new ArrayList<>(decisionResult.getContributingFactors());
+            contribFactors.add("MODE_" + mode.name());
             result.setContributingFactors(contribFactors);
 
             boolean isExpectedMalicious = "BLOCK".equals(scenario.getExpectedDecision()) || "REVIEW".equals(scenario.getExpectedDecision());
@@ -164,23 +243,24 @@ public class SecurityEvaluationService {
 
             result.setPassed(passed);
 
-            if (!isExpectedMalicious && isActualMalicious) { // Expected ALLOW but got BLOCK/REVIEW
+            if (!isExpectedMalicious && isActualMalicious) {
                 result.setFalsePositive(true);
                 falsePositives.add(result);
-                fp++;
-            } else if (isExpectedMalicious && !isActualMalicious) { // Expected BLOCK/REVIEW but got ALLOW
+            } else if (isExpectedMalicious && !isActualMalicious) {
                 result.setFalseNegative(true);
                 falseNegatives.add(result);
-                fn++;
-            } else if (isExpectedMalicious && isActualMalicious) {
-                tp++;
-            } else {
-                tn++;
             }
 
-            if ("REVIEW".equals(actualDecision) || "SAFE_BUT_AMBIGUOUS".equals(scenario.getExpectedCategory()) || "SUSPICIOUS".equals(scenario.getExpectedCategory())) {
+            if ("REVIEW".equals(actualDecision) || "AMBIGUOUS".equals(datasetValidator.normalizeCategory(scenario.getExpectedCategory()))) {
                 result.setAmbiguous(true);
                 ambiguousCases.add(result);
+            }
+
+            if ("RETRIEVED".equalsIgnoreCase(scenario.getProvenance()) || "UNTRUSTED".equalsIgnoreCase(scenario.getProvenance()) || "EXTERNAL_TOOL".equalsIgnoreCase(scenario.getProvenance())) {
+                provenanceFindings.add(String.format("Provenance contrast [%s]: High risk origin source '%s' evaluated for scenario '%s'.", mode, scenario.getProvenance(), scenario.getId()));
+            }
+            if (scenario.isAdversarial()) {
+                adversarialFindings.add(String.format("Adversarial payload [%s]: Category '%s' evaluated with decision '%s'.", mode, scenario.getExpectedCategory(), actualDecision));
             }
 
             detailedResults.add(result);
@@ -191,41 +271,31 @@ public class SecurityEvaluationService {
             categoryResults.computeIfAbsent(scenario.getExpectedCategory(), k -> new ArrayList<>()).add(result);
         }
 
-        // Metrics Calculation
-        double overallAccuracy = scenarios.isEmpty() ? 0.0 : (double) (tp + tn) / scenarios.size();
-        double precision = (tp + fp) > 0 ? (double) tp / (tp + fp) : 1.0;
-        double recall = (tp + fn) > 0 ? (double) tp / (tp + fn) : 1.0;
-        double f1Score = (precision + recall) > 0 ? 2 * (precision * recall) / (precision + recall) : 0.0;
-        double fpr = (fp + tn) > 0 ? (double) fp / (fp + tn) : 0.0;
-        double fnr = (fn + tp) > 0 ? (double) fn / (fn + tp) : 0.0;
-        double avgLatencyMs = scenarios.isEmpty() ? 0.0 : (totalDurationNs / 1_000_000.0) / scenarios.size();
-
+        // Calculate Security Metrics
         SecurityMetrics metrics = new SecurityMetrics();
         metrics.setTotalScenarios(scenarios.size());
-        metrics.setOverallAccuracy(overallAccuracy);
-        metrics.setPrecision(precision);
-        metrics.setRecall(recall);
-        metrics.setF1Score(f1Score);
-        metrics.setFalsePositiveRate(fpr);
-        metrics.setFalseNegativeRate(fnr);
-        metrics.setTruePositives(tp);
-        metrics.setTrueNegatives(tn);
-        metrics.setFalsePositives(fp);
-        metrics.setFalseNegatives(fn);
+        metrics.setOverallAccuracy(confusionMatrix.getAccuracy());
+        metrics.setPrecision(confusionMatrix.getPrecision());
+        metrics.setRecall(confusionMatrix.getRecall());
+        metrics.setF1Score(confusionMatrix.getF1Score());
+        metrics.setFalsePositiveRate(confusionMatrix.getFalsePositiveRate());
+        metrics.setFalseNegativeRate(confusionMatrix.getFalseNegativeRate());
+        metrics.setTruePositives(confusionMatrix.getTruePositives());
+        metrics.setTrueNegatives(confusionMatrix.getTrueNegatives());
+        metrics.setFalsePositives(confusionMatrix.getFalsePositives());
+        metrics.setFalseNegatives(confusionMatrix.getFalseNegatives());
         metrics.setAllowCount(allowCount);
         metrics.setReviewCount(reviewCount);
         metrics.setBlockCount(blockCount);
-        metrics.setAverageLatencyMs(avgLatencyMs);
+        metrics.setAverageLatencyMs(scenarios.isEmpty() ? 0.0 : (totalDurationNs / 1_000_000.0) / scenarios.size());
 
-        // Category metrics calculation
+        // Category Metrics
         Map<String, SecurityMetrics.CategoryMetric> categoryMetrics = new HashMap<>();
         for (Map.Entry<String, List<EvaluationResult>> entry : categoryResults.entrySet()) {
             String cat = entry.getKey();
             List<EvaluationResult> catList = entry.getValue();
             int catTotal = catList.size();
-            int catCorrect = 0;
-            int catFp = 0;
-            int catFn = 0;
+            int catCorrect = 0, catFp = 0, catFn = 0;
 
             for (EvaluationResult r : catList) {
                 if (r.isPassed()) catCorrect++;
@@ -244,50 +314,20 @@ public class SecurityEvaluationService {
         }
         metrics.setCategoryMetrics(categoryMetrics);
 
-        // Provenance & Adversarial Analysis
-        for (Map.Entry<String, EvaluationResult> entry : pairResultMap.entrySet()) {
-            String pairId = entry.getKey();
-            if (pairId != null && pairId.endsWith("-A")) {
-                String pairBId = pairId.substring(0, pairId.length() - 2) + "-B";
-                EvaluationResult resA = entry.getValue();
-                EvaluationResult resB = pairResultMap.get(pairBId);
-
-                if (resA != null && resB != null) {
-                    provenanceFindings.add(String.format("Pair [%s vs %s]: Provenance '%s' vs '%s' -> Decision '%s' (Risk: %d) vs Decision '%s' (Risk: %d)",
-                            resA.getScenarioId(), resB.getScenarioId(),
-                            resA.getProvenance(), resB.getProvenance(),
-                            resA.getActualDecision(), resA.getRiskScore(),
-                            resB.getActualDecision(), resB.getRiskScore()));
-                }
-            }
-        }
-
-        for (EvaluationScenario s : scenarios) {
-            if (s.isAdversarial()) {
-                EvaluationResult res = scenarioResultMap.get(s.getId());
-                if (res != null) {
-                    adversarialFindings.add(String.format("Adversarial Sample [%s] (%s): Expected '%s', Actual '%s' (Passed: %s, Risk: %d)",
-                            s.getId(), s.getAttackType() != null ? s.getAttackType() : s.getExpectedCategory(), s.getExpectedDecision(), res.getActualDecision(), res.isPassed(), res.getRiskScore()));
-                }
-            }
-        }
-
-        // Critical Findings Synthesis
-        if (fn > 0) {
-            criticalFindings.add(String.format("CRITICAL: Detected %d False Negative(s) where malicious memory payloads were permitted.", fn));
+        // Findings Synthesis
+        if (confusionMatrix.getFalseNegatives() > 0) {
+            criticalFindings.add(String.format("CRITICAL [%s]: Detected %d False Negative(s) where malicious memory payloads were permitted.", mode, confusionMatrix.getFalseNegatives()));
         } else {
-            criticalFindings.add("SECURITY VERIFIED: Zero False Negatives detected. All malicious payloads blocked/quarantined.");
+            criticalFindings.add(String.format("SECURITY VERIFIED [%s]: Zero False Negatives detected. All malicious payloads blocked/quarantined.", mode));
         }
 
-        if (fp > 0) {
-            criticalFindings.add(String.format("WARNING: Detected %d False Positive(s) where benign/trusted memories were flagged for review.", fp));
+        if (confusionMatrix.getFalsePositives() > 0) {
+            criticalFindings.add(String.format("WARNING [%s]: Detected %d False Positive(s) where benign/trusted memories were flagged for review.", mode, confusionMatrix.getFalsePositives()));
         } else {
-            criticalFindings.add("USABILITY VERIFIED: Zero False Positives detected on clean benchmark dataset.");
+            criticalFindings.add(String.format("USABILITY VERIFIED [%s]: Zero False Positives detected.", mode));
         }
 
-        criticalFindings.add(String.format("Detection Attribution Breakdown: Rule-Only: %d, Semantic-Only: %d, Both: %d, Neither: %d", ruleOnlyCount, semanticOnlyCount, bothCount, neitherCount));
-        criticalFindings.add(String.format("Provenance Sensitivity: MemoryGuard evaluates risk dynamically based on source trust levels. Verified %d contrast pairs.", provenanceFindings.size()));
-        criticalFindings.add(String.format("Adversarial Robustness: Evaluated %d adversarial samples. Overall F1 score: %.2f%%.", scenarios.size(), f1Score * 100));
+        criticalFindings.add(String.format("Evaluation Mode: %s. Overall F1 Score: %.2f%%, Accuracy: %.2f%%", mode, metrics.getF1Score() * 100, metrics.getOverallAccuracy() * 100));
 
         report.setOverallMetrics(metrics);
         report.setDetectorContributions(new EvaluationReport.DetectorContributions(
@@ -307,8 +347,72 @@ public class SecurityEvaluationService {
         return report;
     }
 
+
+    /**
+     * Conducts a side-by-side comparative evaluation of RULES_ONLY vs RULES_PLUS_AI.
+     */
+    public EvaluationReport runComparativeEvaluation(List<EvaluationScenario> scenarios) {
+        EvaluationReport reportRulesOnly = runEvaluationOnScenarios(scenarios, EvaluationMode.RULES_ONLY);
+        EvaluationReport reportRulesPlusAi = runEvaluationOnScenarios(scenarios, EvaluationMode.RULES_PLUS_AI);
+
+        EvaluationReport comparativeReport = new EvaluationReport();
+        comparativeReport.setDatasetSize(scenarios.size());
+        comparativeReport.setTotalCases(scenarios.size());
+        comparativeReport.setOverallMetrics(reportRulesPlusAi.getOverallMetrics());
+        comparativeReport.setDetailedResults(reportRulesPlusAi.getDetailedResults());
+        comparativeReport.setFalsePositives(reportRulesPlusAi.getFalsePositives());
+        comparativeReport.setFalseNegatives(reportRulesPlusAi.getFalseNegatives());
+        comparativeReport.setAmbiguousCases(reportRulesPlusAi.getAmbiguousCases());
+
+        List<String> findings = new ArrayList<>();
+        SecurityMetrics mRules = reportRulesOnly.getOverallMetrics();
+        SecurityMetrics mAi = reportRulesPlusAi.getOverallMetrics();
+
+        findings.add("=== COMPARATIVE BENCHMARK SUMMARY: RULES_ONLY VS RULES_PLUS_AI ===");
+        findings.add(String.format("RULES_ONLY   -> Accuracy: %.4f, Precision: %.4f, Recall: %.4f, F1: %.4f, FPR: %.4f, FNR: %.4f",
+                mRules.getOverallAccuracy(), mRules.getPrecision(), mRules.getRecall(), mRules.getF1Score(), mRules.getFalsePositiveRate(), mRules.getFalseNegativeRate()));
+        findings.add(String.format("RULES_PLUS_AI -> Accuracy: %.4f, Precision: %.4f, Recall: %.4f, F1: %.4f, FPR: %.4f, FNR: %.4f",
+                mAi.getOverallAccuracy(), mAi.getPrecision(), mAi.getRecall(), mAi.getF1Score(), mAi.getFalsePositiveRate(), mAi.getFalseNegativeRate()));
+
+        double f1Diff = mAi.getF1Score() - mRules.getF1Score();
+        if (f1Diff > 0) {
+            findings.add(String.format("SEMANTIC ADVANTAGE: RULES_PLUS_AI improved F1 Score by +%.2f%% over RULES_ONLY.", f1Diff * 100));
+        } else if (f1Diff < 0) {
+            findings.add(String.format("RULES ADVANTAGE: RULES_ONLY outperformed RULES_PLUS_AI by +%.2f%% F1 Score.", Math.abs(f1Diff) * 100));
+        } else {
+            findings.add("PARITY: Both RULES_ONLY and RULES_PLUS_AI achieved identical overall F1 Score performance.");
+        }
+
+        comparativeReport.setCriticalFindings(findings);
+        this.latestReport = comparativeReport;
+        return comparativeReport;
+    }
+
     public List<EvaluationScenario> loadScenarios() {
-        // Try local file path for adversarial dataset first
+        // Try benchmark_dataset.json first from resources or local file
+        try (InputStream is = getClass().getResourceAsStream("/benchmark_dataset.json")) {
+            if (is != null) {
+                EvaluationScenario[] array = objectMapper.readValue(is, EvaluationScenario[].class);
+                return Arrays.asList(array);
+            }
+        } catch (Exception ignored) {}
+
+        try {
+            Path file = Paths.get("evaluation/datasets/benchmark_dataset.json");
+            if (Files.exists(file)) {
+                EvaluationScenario[] array = objectMapper.readValue(file.toFile(), EvaluationScenario[].class);
+                return Arrays.asList(array);
+            }
+        } catch (Exception ignored) {}
+
+        // Fallback to adversarial_test_corpus.json
+        try (InputStream is = getClass().getResourceAsStream("/adversarial_test_corpus.json")) {
+            if (is != null) {
+                EvaluationScenario[] array = objectMapper.readValue(is, EvaluationScenario[].class);
+                return Arrays.asList(array);
+            }
+        } catch (Exception ignored) {}
+
         try {
             Path file = Paths.get("evaluation/datasets/adversarial_test_corpus.json");
             if (Files.exists(file)) {
@@ -317,24 +421,7 @@ public class SecurityEvaluationService {
             }
         } catch (Exception ignored) {}
 
-        // Try adversarial_test_corpus.json from classpath
-        try (InputStream is = getClass().getResourceAsStream("/adversarial_test_corpus.json")) {
-            if (is != null) {
-                EvaluationScenario[] array = objectMapper.readValue(is, EvaluationScenario[].class);
-                return Arrays.asList(array);
-            }
-        } catch (Exception ignored) {}
-
-        // Try local file path for security_scenarios.json
-        try {
-            Path file = Paths.get("evaluation/datasets/security_scenarios.json");
-            if (Files.exists(file)) {
-                EvaluationScenario[] array = objectMapper.readValue(file.toFile(), EvaluationScenario[].class);
-                return Arrays.asList(array);
-            }
-        } catch (Exception ignored) {}
-
-        // Fallback to security_scenarios.json from classpath
+        // Fallback to security_scenarios.json
         try (InputStream is = getClass().getResourceAsStream("/security_scenarios.json")) {
             if (is != null) {
                 EvaluationScenario[] array = objectMapper.readValue(is, EvaluationScenario[].class);
@@ -354,9 +441,6 @@ public class SecurityEvaluationService {
             }
             File reportFile = reportDir.resolve("latest_evaluation.json").toFile();
             objectMapper.writerWithDefaultPrettyPrinter().writeValue(reportFile, report);
-
-            File reportFileAdv = reportDir.resolve("adversarial_evaluation_report.json").toFile();
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(reportFileAdv, report);
         } catch (Exception e) {
             System.err.println("Failed to write evaluation report JSON files: " + e.getMessage());
         }

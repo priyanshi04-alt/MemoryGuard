@@ -31,6 +31,7 @@ public class SecurityConfig {
                     "/api/memories/**",
                     "/api/quarantine/**",
                     "/api/audit/**",
+                    "/api/security/feedback/**",
                     "/error"
                 ).permitAll()
 

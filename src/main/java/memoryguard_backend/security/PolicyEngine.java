@@ -1,5 +1,6 @@
 package memoryguard_backend.security;
 
+import memoryguard_backend.entity.PolicyVersion;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -16,6 +17,7 @@ import java.util.List;
 public class PolicyEngine {
 
     private final PolicyProperties policyProperties;
+    private volatile PolicyVersion activePolicyVersion;
 
     @Autowired
     public PolicyEngine(PolicyProperties policyProperties) {
@@ -26,15 +28,47 @@ public class PolicyEngine {
         this.policyProperties = new PolicyProperties();
     }
 
+    public void updateActivePolicyVersion(PolicyVersion version) {
+        this.activePolicyVersion = version;
+    }
+
+    public PolicyVersion getActivePolicyVersion() {
+        return activePolicyVersion;
+    }
+
+    public PolicyProperties getPolicyProperties() {
+        return policyProperties;
+    }
+
+    public int getBlockThreshold() {
+        return activePolicyVersion != null ? activePolicyVersion.getBlockThreshold() : policyProperties.getBlockThreshold();
+    }
+
+    public int getReviewThreshold() {
+        return activePolicyVersion != null ? activePolicyVersion.getReviewThreshold() : policyProperties.getReviewThreshold();
+    }
+
+    public double getHighConfidenceThreshold() {
+        return activePolicyVersion != null ? activePolicyVersion.getHighConfidenceThreshold() : policyProperties.getHighConfidenceThreshold();
+    }
+
+    public boolean isCriticalThreatAutoBlock() {
+        return activePolicyVersion != null ? activePolicyVersion.isCriticalThreatAutoBlock() : policyProperties.isCriticalThreatAutoBlock();
+    }
+
+    public String getFailSafeDefaultDecision() {
+        return activePolicyVersion != null ? activePolicyVersion.getFailSafeDefaultDecision() : policyProperties.getFailSafeDefaultDecision();
+    }
+
     /**
      * Legacy helper method for single-score threshold checks.
      */
     public PolicyDecision decide(int riskScore) {
-        if (riskScore >= policyProperties.getBlockThreshold()) {
+        if (riskScore >= getBlockThreshold()) {
             return PolicyDecision.BLOCK;
         }
 
-        if (riskScore >= policyProperties.getReviewThreshold()) {
+        if (riskScore >= getReviewThreshold()) {
             return PolicyDecision.REVIEW;
         }
 
@@ -51,7 +85,7 @@ public class PolicyEngine {
         // Missing, null, unperformed, or invalid risk assessment -> Safe Fallback (REVIEW)
         // ====================================================================
         if (assessment == null || "NO_ANALYSIS".equalsIgnoreCase(assessment.getPrimaryCategory())) {
-            String fallbackDecisionStr = policyProperties.getFailSafeDefaultDecision();
+            String fallbackDecisionStr = getFailSafeDefaultDecision();
             PolicyDecision fallbackDecision = "BLOCK".equalsIgnoreCase(fallbackDecisionStr) ? PolicyDecision.BLOCK : PolicyDecision.REVIEW;
             String persistenceStatus = fallbackDecision == PolicyDecision.BLOCK ? "DENIED" : "QUARANTINED";
             
@@ -77,13 +111,13 @@ public class PolicyEngine {
         boolean hasCriticalThreat = isCriticalSignal(category, contributingFactors);
         boolean hasBehavioralManipulation = isBehavioralManipulation(category, contributingFactors);
         boolean hasBenignContent = isBenignContent(category, contributingFactors);
-        boolean isHighConfidence = confidence >= policyProperties.getHighConfidenceThreshold();
+        boolean isHighConfidence = confidence >= getHighConfidenceThreshold();
 
         // ====================================================================
         // RULE 2: CRITICAL_HIGH_CONFIDENCE_THREAT
         // High-impact critical threat + score >= blockThreshold + high confidence -> BLOCK
         // ====================================================================
-        if (policyProperties.isCriticalThreatAutoBlock() && hasCriticalThreat && score >= policyProperties.getBlockThreshold() && isHighConfidence) {
+        if (isCriticalThreatAutoBlock() && hasCriticalThreat && score >= getBlockThreshold() && isHighConfidence) {
             String explanation = "Memory automatically BLOCKED because it contains a critical threat indicator (" + category + "). " + primaryReason;
             return new PolicyDecisionResult(
                     PolicyDecision.BLOCK,
@@ -102,7 +136,7 @@ public class PolicyEngine {
         // High risk score (>= blockThreshold) BUT low confidence (< highConfidenceThreshold) -> REVIEW
         // Preserves: Risk != Certainty
         // ====================================================================
-        if (score >= policyProperties.getBlockThreshold() && !isHighConfidence) {
+        if (score >= getBlockThreshold() && !isHighConfidence) {
             String explanation = "Memory flagged for REVIEW: high risk score (" + score + "/100) detected, but confidence (" + String.format("%.2f", confidence) + ") is insufficient for automatic blocking. " + primaryReason;
             return new PolicyDecisionResult(
                     PolicyDecision.REVIEW,
@@ -120,7 +154,7 @@ public class PolicyEngine {
         // RULE 4: BENIGN_EDUCATIONAL_CONTENT
         // Educational/non-actionable security discussion without malicious signals -> ALLOW
         // ====================================================================
-        if (hasBenignContent && !hasCriticalThreat && score < policyProperties.getReviewThreshold()) {
+        if (hasBenignContent && !hasCriticalThreat && score < getReviewThreshold()) {
             String explanation = "Memory ALLOWED: educational or benign security content detected without actionable threat context. " + primaryReason;
             return new PolicyDecisionResult(
                     PolicyDecision.ALLOW,
@@ -138,8 +172,8 @@ public class PolicyEngine {
         // RULE 5: BEHAVIORAL_MANIPULATION_REVIEW / BLOCK
         // Intent to alter future behavior (instructions, tools, context) -> REVIEW or BLOCK
         // ====================================================================
-        if (hasBehavioralManipulation && score >= policyProperties.getReviewThreshold()) {
-            if (score >= policyProperties.getBlockThreshold() && isHighConfidence) {
+        if (hasBehavioralManipulation && score >= getReviewThreshold()) {
+            if (score >= getBlockThreshold() && isHighConfidence) {
                 String explanation = "Memory BLOCKED: direct instruction override or persistence manipulation attempt detected with high confidence. " + primaryReason;
                 return new PolicyDecisionResult(
                         PolicyDecision.BLOCK,
@@ -170,7 +204,7 @@ public class PolicyEngine {
         // RULE 6: SCORE_THRESHOLD_BLOCK
         // High Risk Score Threshold (>= blockThreshold) with adequate confidence -> BLOCK
         // ====================================================================
-        if (score >= policyProperties.getBlockThreshold()) {
+        if (score >= getBlockThreshold()) {
             String explanation = "Memory BLOCKED due to high overall risk score (" + score + "/100). " + primaryReason;
             return new PolicyDecisionResult(
                     PolicyDecision.BLOCK,
@@ -188,7 +222,7 @@ public class PolicyEngine {
         // RULE 7: SCORE_THRESHOLD_REVIEW
         // Medium Risk Score Threshold (>= reviewThreshold) -> REVIEW
         // ====================================================================
-        if (score >= policyProperties.getReviewThreshold()) {
+        if (score >= getReviewThreshold()) {
             String explanation = "Memory flagged for REVIEW due to moderate risk score (" + score + "/100) or ambiguous security context. " + primaryReason;
             return new PolicyDecisionResult(
                     PolicyDecision.REVIEW,

@@ -32,6 +32,7 @@ public class SecurityConfig {
                     "/api/quarantine/**",
                     "/api/audit/**",
                     "/api/security/feedback/**",
+                    "/api/security/policy/**",
                     "/error"
                 ).permitAll()
 

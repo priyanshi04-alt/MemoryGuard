@@ -30,19 +30,18 @@ export default function PolicyGovernance() {
       'X-Operator-Id': operatorId
     }
 
+    const safeFetch = (url, fallback) =>
+      fetch(url, { headers })
+        .then(res => (res.ok ? res.json() : fallback))
+        .catch(() => fallback)
+
     Promise.all([
-      fetch(`${API_BASE_URL}/api/security/policy/active`, { headers })
-        .then(res => res.ok ? res.json() : null),
-      fetch(`${API_BASE_URL}/api/security/policy/proposals`, { headers })
-        .then(res => res.ok ? res.json() : []),
-      fetch(`${API_BASE_URL}/api/security/policy/metrics`, { headers })
-        .then(res => res.ok ? res.json() : null),
-      fetch(`${API_BASE_URL}/api/security/policy/health`, { headers })
-        .then(res => res.ok ? res.json() : null),
-      fetch(`${API_BASE_URL}/api/security/policy/anomalies/summary`, { headers })
-        .then(res => res.ok ? res.json() : null),
-      fetch(`${API_BASE_URL}/api/security/audit/latest`, { headers })
-        .then(res => res.ok ? res.json() : null)
+      safeFetch(`${API_BASE_URL}/api/security/policy/active`, null),
+      safeFetch(`${API_BASE_URL}/api/security/policy/proposals`, []),
+      safeFetch(`${API_BASE_URL}/api/security/policy/metrics`, null),
+      safeFetch(`${API_BASE_URL}/api/security/policy/health`, null),
+      safeFetch(`${API_BASE_URL}/api/security/policy/anomalies/summary`, null),
+      safeFetch(`${API_BASE_URL}/api/security/audit/latest`, null)
     ])
     .then(([activeData, proposalsData, metricsData, healthData, anomaliesData, auditData]) => {
       setActivePolicy(activeData)
@@ -54,7 +53,7 @@ export default function PolicyGovernance() {
     })
     .catch(err => {
       console.error(err)
-      setError('Failed to fetch governance data. Please ensure backend is running.')
+      setError('Failed to fetch governance data. Please check backend connection.')
     })
     .finally(() => setLoading(false))
   }
@@ -222,21 +221,23 @@ export default function PolicyGovernance() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginBottom: '24px' }}>
             <div className="gov-card">
               <div style={{ color: '#94a3b8', fontSize: '12px', textTransform: 'uppercase', marginBottom: '6px' }}>Active Policy Version</div>
-              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#38bdf8' }}>
-                v{activePolicy?.version || 1}
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: activePolicy ? '#38bdf8' : '#94a3b8' }}>
+                v{activePolicy ? activePolicy.version : '—'}
               </div>
               <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
-                State: <span style={{ color: '#34d399', fontWeight: '600' }}>{activePolicy?.status || 'ACTIVE'}</span>
+                State: <span style={{ color: activePolicy?.status === 'ACTIVE' ? '#34d399' : (activePolicy ? '#fbbf24' : '#94a3b8'), fontWeight: '600' }}>
+                  {activePolicy ? activePolicy.status : 'UNAVAILABLE'}
+                </span>
               </div>
             </div>
 
             <div className="gov-card">
               <div style={{ color: '#94a3b8', fontSize: '12px', textTransform: 'uppercase', marginBottom: '6px' }}>Enforcement Thresholds</div>
               <div style={{ fontSize: '16px', fontWeight: '600', color: '#e2e8f0' }}>
-                Block: <span style={{ color: '#f87171' }}>{activePolicy?.blockThreshold ?? 80}</span> | Review: <span style={{ color: '#fbbf24' }}>{activePolicy?.reviewThreshold ?? 50}</span>
+                Block: <span style={{ color: '#f87171' }}>{activePolicy?.blockThreshold ?? '—'}</span> | Review: <span style={{ color: '#fbbf24' }}>{activePolicy?.reviewThreshold ?? '—'}</span>
               </div>
               <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
-                Fail-Safe: {activePolicy?.failSafeDefaultDecision || 'REVIEW'}
+                Fail-Safe: {activePolicy?.failSafeDefaultDecision || '—'}
               </div>
             </div>
 
@@ -251,7 +252,7 @@ export default function PolicyGovernance() {
             </div>
 
             <div className="gov-card">
-              <div style={{ color: '#94a3b8', fontSize: '12px', textTransform: 'uppercase', marginBottom: '6px' }}>Audit Readiness (Day 36)</div>
+              <div style={{ color: '#94a3b8', fontSize: '12px', textTransform: 'uppercase', marginBottom: '6px' }}>Audit Readiness</div>
               <div style={{ fontSize: '18px', fontWeight: 'bold', color: auditPackage?.readinessStatus === 'READY' ? '#34d399' : '#38bdf8' }}>
                 {auditPackage ? auditPackage.readinessStatus : 'NOT GENERATED'}
               </div>
@@ -261,11 +262,11 @@ export default function PolicyGovernance() {
             </div>
           </div>
 
-          {/* Audit Package Section (Day 36) */}
+          {/* Audit Package Section */}
           <section className="analysis-panel" style={{ marginBottom: '24px' }}>
             <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <h2>Day 36 Security Audit Package & Compliance</h2>
+                <h2>Security Audit Package & Compliance</h2>
                 <p>Deterministic, cryptographically verifiable evidence package for auditors.</p>
               </div>
               <button

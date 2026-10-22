@@ -145,17 +145,6 @@ function MainLayout() {
 
         <NavigationItems onItemClick={() => setMobileMenuOpen(false)} />
 
-        <div className="theme-toggle-container">
-          <button
-            className="theme-toggle-btn"
-            onClick={toggleTheme}
-            aria-label="Toggle light or dark mode"
-          >
-            <span>{theme === 'dark' ? '☀' : '🌙'}</span>
-            <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
-          </button>
-        </div>
-
         <div className="sidebar-bottom">
           <span className="status-dot"></span>
           Gateway Online
@@ -164,6 +153,16 @@ function MainLayout() {
 
       {/* Main Content Area */}
       <main className="main-content">
+        {/* Floating Top-Right Theme Toggle Symbol */}
+        <button
+          className="top-theme-toggle"
+          onClick={toggleTheme}
+          aria-label="Toggle light or dark mode"
+          title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+        >
+          {theme === 'dark' ? '☀' : '🌙'}
+        </button>
+
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/memory-analysis" element={<MemoryAnalysis />} />
